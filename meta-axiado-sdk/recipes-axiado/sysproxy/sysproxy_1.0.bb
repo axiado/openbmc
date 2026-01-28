@@ -11,9 +11,9 @@ SRCBRANCH ?= "${LATEST_RELEASE_VERSION}"
 SRCBRANCH_qpc ?= "release/release-7.1.0"
 SRCREV_FORMAT = "sysproxy_axhal_sdk_porting_qpc"
 SRCREV_sysproxy = "dd3543c5657d87bd1664c0469d4233fa91104452"
-SRCREV_axhal = "1c65acf361283d6393429a608e86a99e2b258897"
-SRCREV_sdk = "eb9708e10b0ddacc56eef4065593b383a2bd57e4"
-SRCREV_porting = "5750943eb6d69135d51f236e40c08f258fe9f745"
+SRCREV_axhal = "d0f231db0cdb1951a487fed588a9269acc5f8bbb"
+SRCREV_sdk = "d05005b0bfb66a455586e47ea5097500644aee2c"
+SRCREV_porting = "9a968a4c182fabbe8df022bacaa9c07d261f64ac"
 SRCREV_qpc = "2f827e8203df2fc613f6ab852b0dd8d081f6a432"
 SRC_URI = "git://git@sourcevault.axiadord:7999/apps/sysproxy.git;protocol=ssh;branch=${SRCBRANCH};name=sysproxy \
            git://git@sourcevault.axiadord:7999/axsw/ax_hal.git;protocol=ssh;branch=${SRCBRANCH};name=axhal;destsuffix=ax_hal \
