@@ -10,7 +10,7 @@ PROVIDES += "virtual/kernel"
 
 KCONFIG_MODE = "--alldefconfig"
 
-inherit kernel_axiado
+inherit kernel
 require recipes-kernel/linux/linux-yocto.inc
 
 SRCBRANCH ?= "${LATEST_RELEASE_VERSION}"
