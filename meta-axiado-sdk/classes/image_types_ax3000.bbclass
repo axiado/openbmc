@@ -28,4 +28,5 @@ do_generate_ext4_tar() {
     make_tar_of_images ext4.mmc MANIFEST publickey ${signature_files}
 }
 
-do_generate_ext4_tar[depends] += "provision:do_compile"
+do_generate_ext4_tar[depends] += "provision:do_deploy"
+do_image_wic[depends] += "provision:do_deploy"
