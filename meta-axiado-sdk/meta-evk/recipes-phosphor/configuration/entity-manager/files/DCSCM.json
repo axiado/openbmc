@@ -3,7 +3,7 @@
         "Exposes": [
             {
                 "Address": "0x48",
-                "Bus": 7,
+                "Bus": "$BUS",
                 "Name": "DCSCM 0 Temp",
                 "Thresholds": [
                     {
@@ -34,8 +34,8 @@
                 "Type": "TMP75"
             }
         ],
-        "Name": "MTAHOE",
-        "Probe": "xyz.openbmc_project.FruDevice({'BUS': 7, 'ADDRESS': 80, 'PRODUCT_PRODUCT_NAME': 'MTAHOE'})",
+        "Name": "SCM3003",
+        "Probe": "xyz.openbmc_project.FruDevice({'PRODUCT_MANUFACTURER': 'AXIADO', 'PRODUCT_PRODUCT_NAME': 'MTAHOE'})",
         "Type": "Board",
         "xyz.openbmc_project.Inventory.Decorator.Asset": {
             "Manufacturer": "$PRODUCT_MANUFACTURER",
@@ -51,7 +51,7 @@
         "Exposes": [
             {
                 "Address": "0x48",
-                "Bus": 7,
+                "Bus": "$BUS",
                 "Name": "DCSCM 0 Temp",
                 "Thresholds": [
                     {
@@ -83,7 +83,7 @@
             },
             {
                 "Address": "0x49",
-                "Bus": 7,
+                "Bus": "$BUS",
                 "Name": "DCSCM 1 Temp",
                 "Thresholds": [
                     {
@@ -114,8 +114,8 @@
                 "Type": "TMP75"
             }
         ],
-        "Name": "SNOWBIRD",
-        "Probe": "xyz.openbmc_project.FruDevice({'BUS': 7, 'ADDRESS': 80, 'PRODUCT_PRODUCT_NAME': 'SNOWBIRD'})",
+        "Name": "SCM3002",
+        "Probe": "xyz.openbmc_project.FruDevice({'PRODUCT_MANUFACTURER': 'AXIADO', 'PRODUCT_PRODUCT_NAME': 'SNOWBIRD'})",
         "Type": "Board",
         "xyz.openbmc_project.Inventory.Decorator.Asset": {
             "Manufacturer": "$PRODUCT_MANUFACTURER",
