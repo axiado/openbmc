@@ -1,6 +1,6 @@
 require u-boot-axiado.inc
 
-SRCREV ?= "aa4751c2b02c5e54d8911a6755c5b55cd10d893a"
+SRCREV ?= "c2b8cff15566c60ec117785b49454ac7cfb4706d"
 
 SRC_URI = "git://github.com/axiado/u-boot-axiado;protocol=https;branch=u-boot-2019.04-axiado"
 SRC_URI += "file://u-boot-axiado-env"
