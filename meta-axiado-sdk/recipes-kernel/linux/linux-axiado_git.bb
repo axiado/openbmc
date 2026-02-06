@@ -1,3 +1,3 @@
-SRCREV = "94a52e88870690422aa230e4ba0b39f7e18bb128"
+SRCREV = "7d78b048b86c56bde587bc7f32565671cacf1c58"
 
 require linux-axiado.inc
