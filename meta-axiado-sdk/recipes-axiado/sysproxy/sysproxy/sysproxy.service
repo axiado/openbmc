@@ -4,6 +4,7 @@ After=eip_fwl.service
 
 [Service]
 ExecStart=/usr/bin/sysmgr_proxy
+ExecStartPre=/bin/sh -c 'mkdir -p /etc/ax-firmware-version'
 Restart=always
 StandardOutput=tty
 TTYPath=/dev/ttyPS3

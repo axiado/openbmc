@@ -1,4 +1,4 @@
-# Copyright (c) 2021-24 Axiado Corporation (or its affiliates). All rights reserved.
+# Copyright (c) 2021-26 Axiado Corporation (or its affiliates). All rights reserved.
 
 SUMMARY = "Sysproxy"
 SECTION = "Sysproxy application"
@@ -10,10 +10,10 @@ LIC_FILES_CHKSUM ?= "file://COPYING.axiado;md5=01d0d9bdb04606d39dcbff1ca352f133"
 SRCBRANCH ?= "${LATEST_RELEASE_VERSION}"
 SRCBRANCH_qpc ?= "release/release-7.1.0"
 SRCREV_FORMAT = "sysproxy_axhal_sdk_porting_qpc"
-SRCREV_sysproxy = "dd3543c5657d87bd1664c0469d4233fa91104452"
-SRCREV_axhal = "d0f231db0cdb1951a487fed588a9269acc5f8bbb"
-SRCREV_sdk = "d05005b0bfb66a455586e47ea5097500644aee2c"
-SRCREV_porting = "9a968a4c182fabbe8df022bacaa9c07d261f64ac"
+SRCREV_sysproxy = "0faae786ed338c929baabecbc64e823d10d9bac2"
+SRCREV_axhal = "d16c43a0bec3495b5e410fe58df68abd4de73791"
+SRCREV_sdk = "8f3255d74f3cdbe981dbb9337fb1478fadeb239f"
+SRCREV_porting = "9457344ecd2fe7817d02cb717a75e5e3187b8553"
 SRCREV_qpc = "2f827e8203df2fc613f6ab852b0dd8d081f6a432"
 SRC_URI = "git://git@sourcevault.axiadord:7999/apps/sysproxy.git;protocol=ssh;branch=${SRCBRANCH};name=sysproxy \
            git://git@sourcevault.axiadord:7999/axsw/ax_hal.git;protocol=ssh;branch=${SRCBRANCH};name=axhal;destsuffix=ax_hal \
@@ -21,6 +21,8 @@ SRC_URI = "git://git@sourcevault.axiadord:7999/apps/sysproxy.git;protocol=ssh;br
            git://git@sourcevault.axiadord:7999/axsw/porting.git;protocol=ssh;branch=${SRCBRANCH};name=porting;destsuffix=porting \
            git://git@sourcevault.axiadord:7999/ext/qpc.git;protocol=ssh;branch=${SRCBRANCH_qpc};name=qpc;destsuffix=qpc \
            "
+
+SRC_URI += "file://sysproxy.service"
 
 REL_BUILD_ID = "${@int(os.getenv('REL_BUILD_ID', '0'))}"
 
@@ -51,7 +53,7 @@ do_compile() {
 
 do_install() {
         install -d ${D}/${systemd_unitdir}/system
-        install -m 0644 ${S}/sysproxy.service ${D}/${systemd_unitdir}/system
+        install -m 0644 ${UNPACKDIR}/sysproxy.service ${D}/${systemd_unitdir}/system
         install -d ${D}${bindir}
         install -m 0755 ${B}/sysmgr_proxy ${D}${bindir}
 }
