@@ -1,4 +1,4 @@
-# Copyright (c) 2021-24 Axiado Corporation (or its affiliates). All rights reserved.
+# Copyright (c) 2021-26 Axiado Corporation (or its affiliates). All rights reserved.
 
 FILESEXTRAPATHS:append := "${THISDIR}/${PN}:"
 
@@ -10,7 +10,7 @@ PV = "1.0"
 LIC_FILES_CHKSUM ?= "file://COPYING.axiado;md5=01d0d9bdb04606d39dcbff1ca352f133"
 
 SRCBRANCH ?= "${LATEST_RELEASE_VERSION}"
-SRCREV ?= "a5e1398c025e0530aa27674712810560da1d51e6"
+SRCREV ?= "3d39ccb18da019472f35e184ccaefa35625c07be"
 SRC_URI =  "git://git@sourcevault.axiadord:7999/apps/logmgr.git;protocol=ssh;branch=${SRCBRANCH}"
 
 S = "${WORKDIR}/git"
