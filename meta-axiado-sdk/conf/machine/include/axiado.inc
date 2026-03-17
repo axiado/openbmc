@@ -1,4 +1,4 @@
-# Copyright (c) 2021-24 Axiado Corporation (or its affiliates). All rights reserved.
+# Copyright (c) 2021-26 Axiado Corporation (or its affiliates). All rights reserved.
 
 require VERSION.inc
 LATEST_RELEASE_VERSION = "release/release-${COMPONENT_VERSION_MAJOR}.${COMPONENT_VERSION_MINOR}.${COMPONENT_PATCHLEVEL}"

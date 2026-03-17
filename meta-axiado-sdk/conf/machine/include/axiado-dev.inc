@@ -1,4 +1,4 @@
-# Copyright (c) 2021-24 Axiado Corporation (or its affiliates). All rights reserved.
+# Copyright (c) 2021-26 Axiado Corporation (or its affiliates). All rights reserved.
 
 WKS_FILE ?= "emmc-axiado.wks.in"
 WKS_FILE_DEPENDS ?= "virtual/bootloader virtual/kernel"
