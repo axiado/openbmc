@@ -1,4 +1,4 @@
-# Copyright (c) 2021-24 Axiado Corporation (or its affiliates). All rights reserved.
+# Copyright (c) 2021-26 Axiado Corporation (or its affiliates). All rights reserved.
 
 SUMMARY = "Dual Boot State Management"
 DESCRIPTION = "Service to mark boot as successful for dual boot system"
