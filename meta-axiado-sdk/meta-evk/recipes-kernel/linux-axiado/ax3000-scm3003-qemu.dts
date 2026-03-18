@@ -1,0 +1,282 @@
+// SPDX-License-Identifier: GPL-2.0+
+ /*
+  * DTS file for Axiado AX3000 SCM3003 QEMU model
+  * Copyright (c) 2026 Axiado Corporation.
+  */
+
+#include "ax3000-scm3003.dtsi"
+
+/ {
+	compatible = "axiado,ax3000-evk", "axiado,ax3000";
+
+	/delete-node/ iio-hwmon;
+	/delete-node/ update;
+	/delete-node/ reserved-memory;
+	/delete-node/ display-subsystem;
+};
+
+/delete-node/ &ipc0;
+/delete-node/ &ipc1;
+/delete-node/ &ipc2;
+/delete-node/ &ipc3;
+/delete-node/ &ipc4;
+
+&spi0 {
+	status = "disabled";
+};
+
+&spi1 {
+	status = "disabled";
+};
+
+&spi2 {
+	status = "disabled";
+};
+
+&spi3 {
+	status = "disabled";
+};
+
+&i3c0 {
+	status = "disabled";
+};
+
+&i3c1 {
+	status = "disabled";
+};
+
+&i3c2 {
+	status = "disabled";
+};
+
+&i3c3 {
+	status = "disabled";
+};
+
+&i3c4 {
+	status = "disabled";
+};
+
+&i3c5 {
+	status = "disabled";
+};
+
+&i3c6 {
+	status = "disabled";
+};
+
+&i3c7 {
+	status = "disabled";
+};
+
+&i3c8 {
+	status = "disabled";
+};
+
+&i3c9 {
+	status = "disabled";
+};
+
+&i3c10 {
+	status = "disabled";
+};
+
+&i3c11 {
+	status = "disabled";
+};
+
+&i3c12 {
+	status = "disabled";
+};
+
+&i3c13 {
+	status = "disabled";
+};
+
+&i3c14 {
+	status = "disabled";
+};
+
+&i3c15 {
+	status = "disabled";
+};
+
+&i3c16 {
+	status = "disabled";
+};
+
+&usb2_0 {
+	status = "disabled";
+};
+
+&usb2_1 {
+	status = "disabled";
+};
+
+&usb2_2 {
+	status = "disabled";
+};
+
+&usb2_3 {
+	status = "disabled";
+};
+
+&usb3_0 {
+	status = "disabled";
+};
+
+&usb3_1 {
+	status = "disabled";
+};
+
+&pwm0 {
+	status = "disabled";
+};
+
+&pwm1 {
+	status = "disabled";
+};
+
+&pwm2 {
+	status = "disabled";
+};
+
+&pwm3 {
+	status = "disabled";
+};
+
+&pwm4 {
+	status = "disabled";
+};
+
+&pwm5 {
+	status = "disabled";
+};
+
+&pwm6 {
+	status = "disabled";
+};
+
+&pwm7 {
+	status = "disabled";
+};
+
+&pwm8 {
+	status = "disabled";
+};
+
+&pwm9 {
+	status = "disabled";
+};
+
+&pwm10 {
+	status = "disabled";
+};
+
+&pwm11 {
+	status = "disabled";
+};
+
+&pwm12 {
+	status = "disabled";
+};
+
+&pwm13 {
+	status = "disabled";
+};
+
+&pwm14 {
+	status = "disabled";
+};
+
+&pwm15 {
+	status = "disabled";
+};
+
+&fan0 {
+	status = "disabled";
+};
+
+&fan1 {
+	status = "disabled";
+};
+
+&fan2 {
+	status = "disabled";
+};
+
+&fan3 {
+	status = "disabled";
+};
+
+&fan4 {
+	status = "disabled";
+};
+
+&fan5 {
+	status = "disabled";
+};
+
+&fan6 {
+	status = "disabled";
+};
+
+&fan7 {
+	status = "disabled";
+};
+
+&fan8 {
+	status = "disabled";
+};
+
+&fan9 {
+	status = "disabled";
+};
+
+&fan10 {
+	status = "disabled";
+};
+
+&fan11 {
+	status = "disabled";
+};
+
+&fan12 {
+	status = "disabled";
+};
+
+&fan13 {
+	status = "disabled";
+};
+
+&fan14 {
+	status = "disabled";
+};
+
+&fan15 {
+	status = "disabled";
+};
+
+&saradc {
+	status = "disabled";
+};
+
+&pcie_x1 {
+	status = "disabled";
+};
+
+&pcie_x2 {
+	status = "disabled";
+};
+
+&mctp0 {
+	status = "disabled";
+};
+
+/delete-node/ &video;
+/delete-node/ &disp_ctrl;
+/delete-node/ &hdmi;
+
+&hcp {
+	status = "disabled";
+};
