@@ -5,6 +5,12 @@
 SYSFS_GET="/sys/class/axiado_syscon/axiado_syscon0/get_value"
 EXPECTED_VALUE="0xF001"
 
+# if syscon driver is not present then fallback to cold reset
+if [ ! -f "$SYSFS_GET" ]; then
+    /usr/bin/ax3000-fw-update -s
+    exit 0
+fi
+
 # Read 32-bits value that includes \n or \r or whatever emitted by sysfs
 RAW_VALUE=$(cat "$SYSFS_GET" 2>/dev/null)
 
