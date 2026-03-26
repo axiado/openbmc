@@ -1,4 +1,4 @@
-require recipes-axiado/provision/provision.inc
+require provision.inc
 
 PV = "0.1"
 

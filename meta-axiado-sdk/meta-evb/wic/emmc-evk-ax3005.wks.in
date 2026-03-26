@@ -1,0 +1,16 @@
+# Copyright (c) 2021-26 Axiado Corporation (or its affiliates). All rights reserved.
+#
+# Description: Create an image for eMMC
+#
+#  --- - ----- ------
+# |GPT| | env | rwfs |
+#  --- - ----- ------
+#         1MB  1152MB
+
+bootloader --ptable gpt
+
+#env
+part --align 4 --fixed-size 1M --source rawcopy --sourceparams="file=${DEPLOY_DIR_IMAGE}/u-boot-env.bin"
+
+#rwfs
+part --fstype=ext4 --fixed-size 1152M --label rwfs

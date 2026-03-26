@@ -1,0 +1,17 @@
+# Copyright (c) 2021-26 Axiado Corporation (or its affiliates). All rights reserved.
+
+require conf/machine/include/obmc-bsp-common.inc
+
+IMAGE_BOOT_FILES = "fitImage"
+KERNEL_IMAGETYPE = "fitImage"
+FLASH_KERNEL_IMAGE = "fitImage"
+
+FLASH_UBOOT_OFFSET = "0"
+FLASH_UBOOT_ENV_OFFSET = "1024"
+FLASH_KERNEL_OFFSET = "1024"
+FLASH_ROFS_OFFSET = "17480"
+FLASH_RWFS_OFFSET = "65535"
+
+WKS_FILE ?= "emmc-ax3005.wks.in"
+WKS_FILE_DEPENDS ?= "virtual/bootloader"
+IMAGE_FSTYPES += "wic.xz"

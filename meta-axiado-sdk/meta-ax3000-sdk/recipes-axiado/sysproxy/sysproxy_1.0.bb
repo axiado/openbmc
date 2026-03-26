@@ -1,4 +1,4 @@
-require recipes-axiado/sysproxy/sysproxy.inc
+require sysproxy.inc
 
 PV = "1.0"
 
