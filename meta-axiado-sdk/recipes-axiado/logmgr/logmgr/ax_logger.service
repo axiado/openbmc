@@ -1,0 +1,12 @@
+[Unit]
+Description=TCU Logger Application Service
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+ExecStart=/usr/bin/ax_logger
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
