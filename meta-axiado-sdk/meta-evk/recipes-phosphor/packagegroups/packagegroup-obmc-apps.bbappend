@@ -1,2 +1,2 @@
-RDEPENDS:${PN}-extras += "curl"
+RDEPENDS:${PN}-extras += "curl entity-manager"
 RDEPENDS:${PN}-ikvm = ""

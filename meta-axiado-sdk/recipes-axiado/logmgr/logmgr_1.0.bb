@@ -1,7 +1,4 @@
 # Copyright (c) 2021-26 Axiado Corporation (or its affiliates). All rights reserved.
-
-FILESEXTRAPATHS:append := "${THISDIR}/${PN}:"
-
 SUMMARY = "Log Manager"
 DESCRIPTION = "Log Manager application to manage TCU logs"
 LICENSE = "CLOSED"
