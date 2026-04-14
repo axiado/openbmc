@@ -7,7 +7,7 @@ PV = "0.1"
 
 LIC_FILES_CHKSUM ?= "file://${COREBASE}/meta-axiado-sdk/COPYING.axiado;md5=3da9cfbcb788c80a0384361b4de20420"
 
-SRCREV = "4bd8c408778e454e52cd85670c8f304fb0aa0422"
+SRCREV = "4fdfb389479b76631ebe6964c86a22aa15a6bd22"
 SRC_URI = "git://git@github.com/axiado/kirkwood-image-tool;protocol=ssh;branch=develop"
 SRC_URI += "file://sign.txt"
 # Make sure the mapping.txt is up-to-date
