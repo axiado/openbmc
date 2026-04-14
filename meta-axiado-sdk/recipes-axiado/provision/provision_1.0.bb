@@ -8,7 +8,7 @@ PV = "1.0"
 LIC_FILES_CHKSUM ?= "file://${COREBASE}/meta-axiado-sdk/COPYING.axiado;md5=3da9cfbcb788c80a0384361b4de20420"
 
 SRCBRANCH ??= "${LATEST_RELEASE_VERSION}"
-SRCREV = "4c111e3ebe14b2ad83ae5f9bfe4ceb4f789e8976"
+SRCREV = "2ea515d1d482649ae8b6dab7bfec77dcebd23820"
 SRC_URI = "git://git@sourcevault.axiadord:7999/bit/provision.git;protocol=ssh;branch=${SRCBRANCH}"
 SRC_URI += "file://sign.txt"
 # Make sure the mapping.txt is up-to-date
