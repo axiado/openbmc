@@ -6,4 +6,11 @@ UBOOT_ENTRYPOINT ?= "0x3E000000"
 UBOOT_LOADADDRESS ?= "0x3E000000"
 UBOOT_DTB_LOADADDRESS ?= "0x40000000"
 
+PREFERRED_PROVIDER_virtual/kernel ?= "linux-axiado"
+PREFERRED_VERSION_linux-axiado ?= "6.6.16+git"
+PREFERRED_PROVIDER_virtual/bootloader ?= "u-boot-axiado"
+PREFERRED_PROVIDER_u-boot ?= "u-boot-axiado"
+PREFERRED_VERSION_u-boot-axiado ?= "2022.04+git"
+PREFERRED_PROVIDER_u-boot-fw-utils ?= "libubootenv"
+
 require conf/machine/include/axiado.inc
