@@ -3,13 +3,6 @@
 require VERSION.inc
 LATEST_RELEASE_VERSION = "release/release-${COMPONENT_VERSION_MAJOR}.${COMPONENT_VERSION_MINOR}.${COMPONENT_PATCHLEVEL}"
 
-PREFERRED_PROVIDER_virtual/kernel ?= "linux-axiado"
-PREFERRED_VERSION_linux-axiado ?= "6.6.16+git"
-PREFERRED_PROVIDER_virtual/bootloader ?= "u-boot-axiado"
-PREFERRED_PROVIDER_u-boot ?= "u-boot-axiado"
-PREFERRED_VERSION_u-boot-axiado ?= "2022.01+git"
-PREFERRED_PROVIDER_u-boot-fw-utils ?= "libubootenv"
-
 # Build var, valid values are ["dbg", "dev", "prod"]
 # Dbg builds initramfs image with filesystem + kernel in a single image and u-boot
 # Dev builds kernel-fitImage and eMMC image with wic filesystem and u-boot
