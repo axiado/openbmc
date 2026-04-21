@@ -11,7 +11,7 @@ LIC_FILES_CHKSUM ?= "file://COPYING.axiado;md5=3da9cfbcb788c80a0384361b4de20420"
 
 SRCBRANCH ?= "${LATEST_RELEASE_VERSION}"
 SRCREV ?= "b3601342e92a31789cb2036bf69773de79c6c11c"
-SRC_URI =  "git://git@sourcevault.axiadord:7999/apps/dtm-agent.git;protocol=ssh;branch=${SRCBRANCH}"
+SRC_URI =  "git://bitbucket.org/ax-engg/dtm-agent.git;protocol=https;branch=${SRCBRANCH}"
 
 S = "${WORKDIR}/git"
 B = "${WORKDIR}/build"
