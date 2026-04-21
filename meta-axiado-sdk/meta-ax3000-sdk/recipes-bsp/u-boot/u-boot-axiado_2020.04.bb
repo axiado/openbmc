@@ -1,7 +1,7 @@
 require recipes-bsp/u-boot/u-boot-axiado.inc
 
 SRCBRANCH = "${LATEST_RELEASE_VERSION}"
-SRC_URI = "git://git@sourcevault.axiadord:7999/linux/u-boot.git;protocol=ssh;branch=${SRCBRANCH}"
+SRC_URI = "git://bitbucket.org/ax-engg/u-boot.git;protocol=https;branch=${SRCBRANCH}"
 SRCREV = "82176f3d5cc499666351934d1533ce8507e438a1"
 
 do_compile:append() {

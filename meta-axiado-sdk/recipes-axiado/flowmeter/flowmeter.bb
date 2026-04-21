@@ -11,7 +11,7 @@ LIC_FILES_CHKSUM ?= "file://COPYING.axiado;md5=3da9cfbcb788c80a0384361b4de20420"
 
 SRCBRANCH ?= "${LATEST_RELEASE_VERSION}"
 SRCREV ?= "890a2cbd3b64760040321e3df87347690dcf07be"
-SRC_URI = "git://git@sourcevault.axiadord:7999/apps/flowmeter.git;protocol=ssh;branch=${SRCBRANCH}"
+SRC_URI = "git://bitbucket.org/ax-engg/flowmeter.git;protocol=https;branch=${SRCBRANCH}"
 
 S = "${WORKDIR}/git"
 B = "${WORKDIR}/build"
