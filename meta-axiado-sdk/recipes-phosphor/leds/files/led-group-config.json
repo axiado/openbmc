@@ -1,0 +1,5 @@
+{
+    "leds": [
+        {"group": "bmc_booted", "Priority": 1, "members": []}
+    ]
+}
