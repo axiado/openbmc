@@ -10,7 +10,6 @@
 	compatible = "axiado,ax3000-evk", "axiado,ax3000";
 
 	/delete-node/ iio-hwmon;
-	/delete-node/ update;
 	/delete-node/ reserved-memory;
 	/delete-node/ display-subsystem;
 };
@@ -278,5 +277,21 @@
 /delete-node/ &hdmi;
 
 &hcp {
+	status = "disabled";
+};
+
+/delete-node/ &ax_logger_sysmgr;
+/delete-node/ &ax_logger_ml_0;
+/delete-node/ &ax_logger_ml_1;
+/delete-node/ &ax_logger_ml_2;
+/delete-node/ &ax_logger_ml_3;
+/delete-node/ &ax_logger_fwl;
+/delete-node/ &ax_logger_svt;
+
+&ax_board_info {
+	status = "disabled";
+};
+
+&update {
 	status = "disabled";
 };

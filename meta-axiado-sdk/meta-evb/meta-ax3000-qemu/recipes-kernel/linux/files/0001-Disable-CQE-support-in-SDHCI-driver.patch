@@ -1,0 +1,30 @@
+From ae6401e32da93544b34236a78b9abbec70c5c00b Mon Sep 17 00:00:00 2001
+From: Kuan-Jui Chiu <kchiu@axiado.com>
+Date: Mon, 27 Apr 2026 03:39:38 -0700
+Subject: [PATCH] Disable CQE support in SDHCI driver
+
+QEMU does not support CQHCI yet so that QEMU would crash when accessing CQHCI
+registers.
+
+Upstream-Status: Pending
+
+Signed-off-by: Kuan-Jui Chiu <kchiu@axiado.com>
+---
+ drivers/mmc/host/sdhci-of-arasan.c | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/drivers/mmc/host/sdhci-of-arasan.c b/drivers/mmc/host/sdhci-of-arasan.c
+index ba08085efcb5..90f7a4853ba0 100644
+--- a/drivers/mmc/host/sdhci-of-arasan.c
++++ b/drivers/mmc/host/sdhci-of-arasan.c
+@@ -2001,7 +2001,6 @@ static int sdhci_arasan_probe(struct platform_device *pdev)
+ 					sdhci_arasan_hs400_enhanced_strobe;
+ 		host->mmc_host_ops.start_signal_voltage_switch =
+ 					sdhci_arasan_voltage_switch;
+-		sdhci_arasan->has_cqe = true;
+ 		host->mmc->caps2 |= MMC_CAP2_CQE;
+ 
+ 		if (!of_property_read_bool(np, "disable-cqe-dcmd"))
+-- 
+2.34.1
+
