@@ -2,9 +2,9 @@ SOC_FAMILY = "axiado-ax3005"
 include conf/machine/include/soc-family.inc
 include conf/machine/include/arm/arch-arm64.inc
 
-UBOOT_ENTRYPOINT ?= "0x8DC00000"
-UBOOT_LOADADDRESS ?= "0x8DC00000"
-UBOOT_DTB_LOADADDRESS ?= "0x91C00000"
+UBOOT_ENTRYPOINT ?= "0x95C00000"
+UBOOT_LOADADDRESS ?= "0x95C00000"
+UBOOT_DTB_LOADADDRESS ?= "0x99C00000"
 
 PREFERRED_PROVIDER_virtual/kernel ?= "linux-axiado"
 PREFERRED_VERSION_linux-axiado ?= "6.6.16+git"
