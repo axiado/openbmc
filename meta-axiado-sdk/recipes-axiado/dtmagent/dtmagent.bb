@@ -9,7 +9,7 @@ PV = "1.0"
 
 LIC_FILES_CHKSUM ?= "file://COPYING.axiado;md5=3da9cfbcb788c80a0384361b4de20420"
 
-SRCBRANCH ?= "${LATEST_RELEASE_VERSION}"
+SRCBRANCH ?= "release/release-0.18.0"
 SRCREV ?= "b3601342e92a31789cb2036bf69773de79c6c11c"
 SRC_URI =  "git://bitbucket.org/ax-engg/dtm-agent.git;protocol=https;branch=${SRCBRANCH}"
 

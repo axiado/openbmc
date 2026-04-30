@@ -1,8 +1,5 @@
 # Copyright (c) 2021-26 Axiado Corporation (or its affiliates). All rights reserved.
 
-require VERSION.inc
-LATEST_RELEASE_VERSION = "release/release-${COMPONENT_VERSION_MAJOR}.${COMPONENT_VERSION_MINOR}.${COMPONENT_PATCHLEVEL}"
-
 # Build var, valid values are ["dbg", "dev", "prod"]
 # Dbg builds initramfs image with filesystem + kernel in a single image and u-boot
 # Dev builds kernel-fitImage and eMMC image with wic filesystem and u-boot
