@@ -14,6 +14,5 @@ BBLAYERS ?= " \
   ##OEROOT##/meta-axiado-sdk \
   ##OEROOT##/meta-axiado-sdk/meta-ax3005-sdk \
   ##OEROOT##/meta-axiado-sdk/meta-evb \
-  ##OEROOT##/meta-axiado-sdk/meta-evb/meta-ax3005 \
-  ##OEROOT##/meta-axiado-sdk/meta-evb/meta-ax3005/meta-ax3005-evk \
+  ##OEROOT##/meta-axiado-sdk/meta-evb/meta-ax3005-evk \
   "
