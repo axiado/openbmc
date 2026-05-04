@@ -3,7 +3,7 @@
 SUMMARY = "Axiado uboot recipe"
 SECTION = "bootloaders"
 LICENSE = "GPL-2.0-or-later"
-LIC_FILES_CHKSUM = "file://README;beginline=1;endline=4;md5=c5130931598a8ad21840e124ffe64ea0"
+LIC_FILES_CHKSUM = "file://Licenses/README;beginline=1;endline=135;md5=99d82354a719c13b8efe19202805e5af"
 
 require recipes-bsp/u-boot/u-boot.inc
 PROVIDES += "u-boot"
