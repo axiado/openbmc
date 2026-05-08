@@ -7,6 +7,8 @@ BBFILES ?= ""
 
 BBLAYERS ?= " \
   ##OEROOT##/meta \
+  ##OEROOT##/meta-arm/meta-arm \
+  ##OEROOT##/meta-arm/meta-arm-toolchain \
   ##OEROOT##/meta-openembedded/meta-oe \
   ##OEROOT##/meta-openembedded/meta-networking \
   ##OEROOT##/meta-openembedded/meta-python \
