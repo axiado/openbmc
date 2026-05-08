@@ -1,0 +1,23 @@
+From: Axiado Corporation <engineering@axiado.com>
+Date: 2025-01-01 00:00:00
+Subject: [PATCH] ax-ultra CMakeLists: limit -ffreestanding to C and ASM only
+
+bali_hal/platform/ax-ultra/CMakeLists.txt adds -ffreestanding to
+bali-hal-impl target options. GCC 13 arm-none-eabi in -ffreestanding C++
+mode no longer exposes malloc/free. Restrict the flag to C/ASM only using
+a CMake generator expression, matching the fix in base/r52-compile-args.cmake.
+
+Upstream-Status: Inappropriate [GCC 13 toolchain compatibility fix]
+Signed-off-by: Axiado Corporation <engineering@axiado.com>
+---
+--- a/bali_hal/platform/ax-ultra/CMakeLists.txt
++++ b/bali_hal/platform/ax-ultra/CMakeLists.txt
+@@ -77,7 +77,7 @@
+     -nostartfiles
+     -g
+ 	-nostdlib
+-    -ffreestanding
++    "$<$<NOT:$<COMPILE_LANGUAGE:CXX>>:-ffreestanding>"
+     -marm
+     -mfloat-abi=hard
+     -mfpu=neon-fp-armv8

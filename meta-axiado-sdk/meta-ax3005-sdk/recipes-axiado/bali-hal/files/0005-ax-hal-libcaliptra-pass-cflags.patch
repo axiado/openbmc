@@ -1,0 +1,53 @@
+From: Axiado Corporation <engineering@axiado.com>
+Date: 2025-01-01 00:00:00
+Subject: [PATCH] ax_hal: pass CFLAGS (not CALIPTRA_C_FLAGS) to libcaliptra build
+
+libcaliptra/Makefile compiles its objects with $(CFLAGS), but
+ax_hal/CMakeLists.txt was exporting the flag string under the wrong
+env-var name (CALIPTRA_C_FLAGS), so the Makefile saw nothing and built
+with the arm-none-eabi default soft-float ABI. The resulting
+libcaliptra.a then fails to link against the rest of bali-system.elf
+(which is hard-float) with:
+
+  ld: error: bali-system.elf uses VFP register arguments,
+      .../caliptra-sw/libcaliptra/libcaliptra.a(caliptra_api.o) does not
+  ld: failed to merge target specific data of file ...libcaliptra.a(...)
+
+Three fixes in one hunk:
+  * Export the value as CFLAGS so the Makefile actually picks it up.
+  * Build the flag string from the same cpu/fpu/float-abi vars that
+    base/r52-compile-args.cmake sets. The previous use of
+    $<TARGET_PROPERTY:base_hal,COMPILE_OPTIONS> expanded to an empty
+    string because base_hal inherits those flags from the directory
+    scope (add_compile_options) rather than via target_compile_options.
+  * Quote each "VAR=VALUE" token passed to `cmake -E env` so the
+    space-separated CFLAGS value stays in a single env entry.
+
+Upstream-Status: Pending [submitted to Axiado ax_hal develop branch]
+Signed-off-by: Axiado Corporation <engineering@axiado.com>
+---
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -94,14 +94,17 @@
+     set(ENV{RTL_SOC_IFC_INCLUDE_PATH}
+         ${LIBCALIPTRA_DIR}/../hw/1.0/rtl/src/soc_ifc/rtl
+     )
++    # libcaliptra/Makefile reads $(CFLAGS). Build the flag string from the
++    # same cpu/fpu/float-abi vars the rest of bali-hal uses so the resulting
++    # libcaliptra.a is ABI-compatible (hard-float) with bali-system.elf.
+     set(CALIPTRA_C_FLAGS
+-        "$<JOIN:$<TARGET_PROPERTY:base_hal,COMPILE_OPTIONS>, >"
++        "-mcpu=${GCC_CPU} -mfpu=${FPU_CONFIG} -mfloat-abi=${FLOAT}"
+     )
+     add_custom_target(build_libcaliptra ALL
+         COMMAND ${CMAKE_COMMAND} -E env
+-            RTL_SOC_IFC_INCLUDE_PATH=$ENV{RTL_SOC_IFC_INCLUDE_PATH}
+-            CROSS_COMPILE=${TOOLCHAIN_PREFIX}
+-            CALIPTRA_C_FLAGS=${CALIPTRA_C_FLAGS}
++            "RTL_SOC_IFC_INCLUDE_PATH=$ENV{RTL_SOC_IFC_INCLUDE_PATH}"
++            "CROSS_COMPILE=${TOOLCHAIN_PREFIX}"
++            "CFLAGS=${CALIPTRA_C_FLAGS}"
+             make -C ${LIBCALIPTRA_DIR}
+         WORKING_DIRECTORY ${LIBCALIPTRA_DIR}
+         COMMENT "Building libcaliptra with ${CALIPTRA_C_FLAGS}"
+
