@@ -1,0 +1,24 @@
+From: Axiado Corporation <engineering@axiado.com>
+Date: 2025-01-01 00:00:00
+Subject: [PATCH] r52-compile-args: limit -ffreestanding to C and ASM only
+
+GCC 13 arm-none-eabi in -ffreestanding C++ mode no longer exposes hosted
+functions (malloc, free, etc.) from <cstdlib>/<stdlib.h>.  The C++ sources
+in this project use hosted stdlib functions, so restrict -ffreestanding to
+C and ASM compilation units only.
+
+Upstream-Status: Inappropriate [GCC 13 toolchain compatibility fix]
+Signed-off-by: Axiado Corporation <engineering@axiado.com>
+---
+--- a/base/r52-compile-args.cmake
++++ b/base/r52-compile-args.cmake
+@@ -65,7 +65,8 @@
+ add_compile_options(
+ 	-mcpu=${GCC_CPU}
+ 	-DCURRENT_CPU_ID=SVM_CPU_ID -DCMAKE_TOOLCHAIN_FILE=${COMPILE_ARG_FILE}
+-	-nostartfiles -nostdlib -g -ffreestanding -marm -fstack-protector-strong -mno-unaligned-access -fno-builtin
++	-nostartfiles -nostdlib -g -marm -fstack-protector-strong -mno-unaligned-access -fno-builtin
++	"$<$<NOT:$<COMPILE_LANGUAGE:CXX>>:-ffreestanding>"
+ 	"$<$<CONFIG:DEBUG>:-gdwarf-3>"
+ 	"$<$<COMPILE_LANGUAGE:CXX>:-fno-unwind-tables;-fno-rtti;-fno-exceptions>"
+ 	-fdata-sections
