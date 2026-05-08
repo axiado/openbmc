@@ -37,6 +37,17 @@ Axiado offers two versions of recipes:
 v1.0 for internal access
 v0.1 for external build which includes pre-built binaries
 
+Prerequisite for building Caliptra-sw with Axiado SDK
+----------------------
+
+```sh
+curl --proto --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+source ~/.cargo/env
+rustup toolchain install 1.85
+rustup target add riscv32imc-unknown-none-elf --toolchain 1.85
+```
+
+
 Setting up
 ----------
 
