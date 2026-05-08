@@ -13,4 +13,6 @@ PREFERRED_PROVIDER_u-boot ?= "u-boot-axiado"
 PREFERRED_VERSION_u-boot-axiado ?= "2026.04"
 PREFERRED_PROVIDER_u-boot-fw-utils ?= "libubootenv"
 
+COMPATIBLE_MACHINE:axiado-ax3005 = "axiado-ax3005"
+
 require conf/machine/include/axiado.inc
