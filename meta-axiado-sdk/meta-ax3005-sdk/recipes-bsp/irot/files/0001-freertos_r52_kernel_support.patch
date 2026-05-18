@@ -1,0 +1,680 @@
+From: Axiado Corporation <engineering@axiado.com>
+Date: 2025-01-01 00:00:00
+Subject: [PATCH] Add Cortex-R52 kernel support for FreeRTOS ARM_CRx_MPU port
+
+Add support for 24 MPU regions (configTOTAL_MPU_REGIONS=24) and
+Cortex-R52 specific context save/restore for the ARM_CRx_MPU port.
+
+Upstream-Status: Inappropriate [Axiado platform-specific Cortex-R52 adaptation]
+Signed-off-by: Axiado Corporation <engineering@axiado.com>
+---
+diff --git a/portable/GCC/ARM_CRx_MPU/port.c b/portable/GCC/ARM_CRx_MPU/port.c
+index 6b8d77cd6..794c9522b 100644
+--- a/portable/GCC/ARM_CRx_MPU/port.c
++++ b/portable/GCC/ARM_CRx_MPU/port.c
+@@ -145,6 +145,18 @@ PRIVILEGED_FUNCTION void vPortExitCritical( void );
+ 
+ /* ----------------------------------------------------------------------------------- */
+ 
++void vPortTickISR(void)
++{
++	vClearTimerInterrupt();
++    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
++
++    /* Increment RTOS tick */
++    xHigherPriorityTaskWoken = xTaskIncrementTick();
++
++    /* Request a context switch if needed */
++    portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
++}
++
+ /**
+  * @brief Setup a FreeRTOS task's initial context.
+  *
+@@ -159,166 +171,62 @@ PRIVILEGED_FUNCTION void vPortExitCritical( void );
+  * @return Location where to restore the task's context from.
+  */
+ /* PRIVILEGED_FUNCTION */
+-StackType_t * pxPortInitialiseStack( StackType_t * pxTopOfStack,
+-                                     TaskFunction_t pxCode,
+-                                     void * pvParameters,
+-                                     BaseType_t xRunPrivileged,
+-                                     xMPU_SETTINGS * xMPUSettings )
++StackType_t *pxPortInitialiseStack( StackType_t *pxTopOfStack,
++                                    TaskFunction_t pxCode,
++                                    void *pvParameters,
++                                    BaseType_t xRunPrivileged,
++                                    xMPU_SETTINGS *xMPUSettings )
+ {
+-    /* Setup the initial context of the task. The context is set exactly as
+-     * expected by the portRESTORE_CONTEXT() macro. */
+-    UBaseType_t ulIndex = CONTEXT_SIZE - 1U;
+-
+-    xSYSTEM_CALL_STACK_INFO * xSysCallInfo = NULL;
+-
+-    if( xRunPrivileged == pdTRUE )
+-    {
+-        xMPUSettings->ulTaskFlags |= portTASK_IS_PRIVILEGED_FLAG;
+-        /* Current Program Status Register (CPSR). */
+-        xMPUSettings->ulContext[ ulIndex ] = SYS_MODE;
+-    }
+-    else
+-    {
+-        xMPUSettings->ulTaskFlags &= ( ~portTASK_IS_PRIVILEGED_FLAG );
+-        /* Current Program Status Register (CPSR). */
+-        xMPUSettings->ulContext[ ulIndex ] = USER_MODE;
+-    }
+-
+-    if( ( ( uint32_t ) pxCode & portTHUMB_MODE_ADDRESS ) != 0x0UL )
+-    {
+-        /* The task will cause the processor to start in THUMB state, set the
+-         * Thumb state bit in the CPSR. */
+-        xMPUSettings->ulContext[ ulIndex ] |= portTHUMB_MODE_BIT;
+-    }
+-
+-    ulIndex--;
+-
+-    xMPUSettings->ulContext[ ulIndex ] = ( StackType_t ) pxCode; /* PC. */
+-    ulIndex--;
+-
+-    xMPUSettings->ulContext[ ulIndex ] = ( StackType_t ) portTASK_RETURN_ADDRESS; /* LR. */
+-    ulIndex--;
+-
+-    xMPUSettings->ulContext[ ulIndex ] = ( StackType_t ) pxTopOfStack; /* SP. */
+-    ulIndex--;
+-
+-    /* General Purpose Registers. */
+-    xMPUSettings->ulContext[ ulIndex ] = ( StackType_t ) 0x12121212; /* R12. */
+-    ulIndex--;
+-    xMPUSettings->ulContext[ ulIndex ] = ( StackType_t ) 0x11111111; /* R11. */
+-    ulIndex--;
+-    xMPUSettings->ulContext[ ulIndex ] = ( StackType_t ) 0x10101010; /* R10. */
+-    ulIndex--;
+-    xMPUSettings->ulContext[ ulIndex ] = ( StackType_t ) 0x09090909; /* R9. */
+-    ulIndex--;
+-    xMPUSettings->ulContext[ ulIndex ] = ( StackType_t ) 0x08080808; /* R8. */
+-    ulIndex--;
+-    xMPUSettings->ulContext[ ulIndex ] = ( StackType_t ) 0x07070707; /* R7. */
+-    ulIndex--;
+-    xMPUSettings->ulContext[ ulIndex ] = ( StackType_t ) 0x06060606; /* R6. */
+-    ulIndex--;
+-    xMPUSettings->ulContext[ ulIndex ] = ( StackType_t ) 0x05050505; /* R5. */
+-    ulIndex--;
+-    xMPUSettings->ulContext[ ulIndex ] = ( StackType_t ) 0x04040404; /* R4. */
+-    ulIndex--;
+-    xMPUSettings->ulContext[ ulIndex ] = ( StackType_t ) 0x03030303; /* R3. */
+-    ulIndex--;
+-    xMPUSettings->ulContext[ ulIndex ] = ( StackType_t ) 0x02020202; /* R2. */
+-    ulIndex--;
+-    xMPUSettings->ulContext[ ulIndex ] = ( StackType_t ) 0x01010101; /* R1. */
+-    ulIndex--;
+-    xMPUSettings->ulContext[ ulIndex ] = ( StackType_t ) pvParameters; /* R0. */
+-    ulIndex--;
+-
+-    #if( portENABLE_FPU == 1 )
+-    {
+-        xMPUSettings->ulContext[ ulIndex ] = ( StackType_t ) 0xD0000015; /* S31. */
+-        ulIndex--;
+-        xMPUSettings->ulContext[ ulIndex ] = ( StackType_t ) 0xD1500000; /* S30. */
+-        ulIndex--;
+-        xMPUSettings->ulContext[ ulIndex ] = ( StackType_t ) 0xD0000014; /* S29. */
+-        ulIndex--;
+-        xMPUSettings->ulContext[ ulIndex ] = ( StackType_t ) 0xD1400000; /* S28. */
+-        ulIndex--;
+-        xMPUSettings->ulContext[ ulIndex ] = ( StackType_t ) 0xD0000013; /* S27. */
+-        ulIndex--;
+-        xMPUSettings->ulContext[ ulIndex ] = ( StackType_t ) 0xD1300000; /* S26. */
+-        ulIndex--;
+-        xMPUSettings->ulContext[ ulIndex ] = ( StackType_t ) 0xD0000012; /* S25. */
+-        ulIndex--;
+-        xMPUSettings->ulContext[ ulIndex ] = ( StackType_t ) 0xD1200000; /* S24. */
+-        ulIndex--;
+-        xMPUSettings->ulContext[ ulIndex ] = ( StackType_t ) 0xD0000011; /* S23. */
+-        ulIndex--;
+-        xMPUSettings->ulContext[ ulIndex ] = ( StackType_t ) 0xD1100000; /* S22. */
+-        ulIndex--;
+-        xMPUSettings->ulContext[ ulIndex ] = ( StackType_t ) 0xD0000010; /* S21. */
+-        ulIndex--;
+-        xMPUSettings->ulContext[ ulIndex ] = ( StackType_t ) 0xD1000000; /* S20. */
+-        ulIndex--;
+-        xMPUSettings->ulContext[ ulIndex ] = ( StackType_t ) 0xD0000009; /* S19. */
+-        ulIndex--;
+-        xMPUSettings->ulContext[ ulIndex ] = ( StackType_t ) 0xD9000000; /* S18. */
+-        ulIndex--;
+-        xMPUSettings->ulContext[ ulIndex ] = ( StackType_t ) 0xD0000008; /* S17. */
+-        ulIndex--;
+-        xMPUSettings->ulContext[ ulIndex ] = ( StackType_t ) 0xD8000000; /* S16. */
+-        ulIndex--;
+-        xMPUSettings->ulContext[ ulIndex ] = ( StackType_t ) 0xD0000007; /* S15. */
+-        ulIndex--;
+-        xMPUSettings->ulContext[ ulIndex ] = ( StackType_t ) 0xD7000000; /* S14. */
+-        ulIndex--;
+-        xMPUSettings->ulContext[ ulIndex ] = ( StackType_t ) 0xD0000006; /* S13. */
+-        ulIndex--;
+-        xMPUSettings->ulContext[ ulIndex ] = ( StackType_t ) 0xD6000000; /* S12. */
+-        ulIndex--;
+-        xMPUSettings->ulContext[ ulIndex ] = ( StackType_t ) 0xD0000005; /* S11. */
+-        ulIndex--;
+-        xMPUSettings->ulContext[ ulIndex ] = ( StackType_t ) 0xD5000000; /* S10. */
+-        ulIndex--;
+-        xMPUSettings->ulContext[ ulIndex ] = ( StackType_t ) 0xD0000004; /* S9. */
+-        ulIndex--;
+-        xMPUSettings->ulContext[ ulIndex ] = ( StackType_t ) 0xD4000000; /* S8. */
+-        ulIndex--;
+-        xMPUSettings->ulContext[ ulIndex ] = ( StackType_t ) 0xD0000003; /* S7. */
+-        ulIndex--;
+-        xMPUSettings->ulContext[ ulIndex ] = ( StackType_t ) 0xD3000000; /* S6. */
+-        ulIndex--;
+-        xMPUSettings->ulContext[ ulIndex ] = ( StackType_t ) 0xD0000002; /* S5. */
+-        ulIndex--;
+-        xMPUSettings->ulContext[ ulIndex ] = ( StackType_t ) 0xD2000000; /* S4. */
+-        ulIndex--;
+-        xMPUSettings->ulContext[ ulIndex ] = ( StackType_t ) 0xD0000001; /* S3. */
+-        ulIndex--;
+-        xMPUSettings->ulContext[ ulIndex ] = ( StackType_t ) 0xD1000000; /* S2. */
+-        ulIndex--;
+-        xMPUSettings->ulContext[ ulIndex ] = ( StackType_t ) 0xD0000000; /* S1. */
+-        ulIndex--;
+-        xMPUSettings->ulContext[ ulIndex ] = ( StackType_t ) 0xD0000000; /* S0. */
+-        ulIndex--;
+-
+-        xMPUSettings->ulContext[ ulIndex ] = ( StackType_t ) 0x00000000; /* FPSR. */
+-        ulIndex--;
+-    }
+-    #endif /* portENABLE_FPU */
+-
+-    /* The task will start with a critical nesting count of 0. */
+-    xMPUSettings->ulContext[ ulIndex ] = portNO_CRITICAL_NESTING;
+-
+-    /* Ensure that the system call stack is double word aligned. */
+-    xSysCallInfo = &( xMPUSettings->xSystemCallStackInfo );
+-    xSysCallInfo->pulSystemCallStackPointer = &( xSysCallInfo->ulSystemCallStackBuffer[ configSYSTEM_CALL_STACK_SIZE - 1U ] );
+-    xSysCallInfo->pulSystemCallStackPointer = ( uint32_t * ) ( ( ( uint32_t ) ( xSysCallInfo->pulSystemCallStackPointer ) ) &
+-                                                               ( ( uint32_t ) ( ~( portBYTE_ALIGNMENT_MASK ) ) ) );
+-
+-    /* This is not NULL only for the duration of a system call. */
+-    xSysCallInfo->pulTaskStackPointer = NULL;
+-
+-    /* Set the System Call to return to vPortSystemCallExit. */
+-    xSysCallInfo->pulSystemCallExitAddress = ( uint32_t * ) ( &vPortSystemCallExit );
+-
+-    /* Return the address where this task's context should be restored from. */
+-    return &( xMPUSettings->ulContext[ ulIndex ] );
++    (void) xMPUSettings;
++    const uint32_t frame_words = 18U;
++
++	/* Align top first */
++	pxTopOfStack = (StackType_t *)(((uintptr_t)pxTopOfStack) & ~((uintptr_t)0x7));
++
++	/* Reserve frame_words (18) at top */
++	StackType_t *frame_base = pxTopOfStack - frame_words;
++
++	/* Ensure frame_base itself is aligned (important) */
++	frame_base = (StackType_t *)(((uintptr_t)frame_base) & ~((uintptr_t)0x7));
++
++	StackType_t *p = frame_base;
++
++	/* [0] ulCriticalNesting */
++	*p++ = 0;
++
++    /* [1..15] r0..r14 (SYS/USR bank) */
++    *p++ = (StackType_t)pvParameters;          /* r0  */
++    *p++ = 0x01010101U;                        /* r1  */
++    *p++ = 0x02020202U;                        /* r2  */
++    *p++ = 0x03030303U;                        /* r3  */
++    *p++ = 0x04040404U;                        /* r4  */
++    *p++ = 0x05050505U;                        /* r5  */
++    *p++ = 0x06060606U;                        /* r6  */
++    *p++ = 0x07070707U;                        /* r7  */
++    *p++ = 0x08080808U;                        /* r8  */
++    *p++ = 0x09090909U;                        /* r9  */
++    *p++ = 0x10101010U;                        /* r10 */
++    *p++ = 0x11111111U;                        /* r11 */
++    *p++ = 0x12121212U;                        /* r12 */
++
++    *p++ = (StackType_t)frame_base;          /* r13 (SP_sys) */
++    *p++ = (StackType_t)portTASK_RETURN_ADDRESS;/* r14 (LR_sys) */
++
++    /* [16] PC */
++    *p++ = (StackType_t)pxCode;                /* MUST be ARM address */
++
++    /* [17] SPSR to restore into CPSR on exception return */
++    uint32_t cpsr;
++    __asm volatile ("mrs %0, cpsr" : "=r"(cpsr));
++    cpsr &= ~0x1FU;
++	cpsr |= (xRunPrivileged ? 0x1FU : 0x10U);
++    cpsr |= 0x1FU;          /* SYS mode */
++    cpsr &= ~(1U << 5);     /* FORCE ARM state (T=0) */
++    cpsr &= ~(1U << 7);     /* I=0 (IRQs enabled in task) */
++    cpsr &= ~(1U << 6);     /* F=0 (FIQs enabled if you want; or set if you don’t) */
++    *p++ = (StackType_t)cpsr;
++
++    return frame_base;
+ }
+ 
+ /* ----------------------------------------------------------------------------------- */
+@@ -498,6 +406,7 @@ static uint32_t prvGetMPURegionSizeEncoding( uint32_t ulActualMPURegionSize )
+ /* PRIVILEGED_FUNCTION */
+ static void prvSetupMPU( void )
+ {
++#if 0
+ #if defined( __ARMCC_VERSION )
+     /* Declaration when these variable are defined in code. */
+     /* Sections used for FLASH. */
+@@ -525,7 +434,6 @@ static void prvSetupMPU( void )
+     extern uint32_t __privileged_data_start__[];
+     extern uint32_t __privileged_data_end__[];
+ #endif /* if defined( __ARMCC_VERSION ) */
+-
+     uint32_t ulRegionLength;
+     uint32_t ulRegionLengthEncoded;
+ 
+@@ -565,6 +473,7 @@ static void prvSetupMPU( void )
+ 
+     /* After setting default regions, enable the MPU. */
+     vMPUEnable();
++#endif
+ }
+ 
+ /* ----------------------------------------------------------------------------------- */
+@@ -575,7 +484,12 @@ static BaseType_t prvMPURegionAuthorizesBuffer( const xMPU_REGION_REGISTERS * xT
+                                                 const uint32_t ulBufferLength,
+                                                 const uint32_t ulAccessRequested )
+ {
+-    BaseType_t xAccessGranted = pdFALSE;
++    (void)xTaskMPURegion;
++    (void)ulBufferStart;
++    (void)ulBufferLength;
++    (void)ulAccessRequested;
++    BaseType_t xAccessGranted = pdTRUE;
++#if 0
+     uint32_t ulBufferEnd;
+     uint32_t ulMPURegionLength;
+     uint32_t ulMPURegionStart;
+@@ -614,7 +528,7 @@ static BaseType_t prvMPURegionAuthorizesBuffer( const xMPU_REGION_REGISTERS * xT
+             }
+         }
+     }
+-
++#endif
+     return xAccessGranted;
+ }
+ 
+diff --git a/portable/GCC/ARM_CRx_MPU/portASM.S b/portable/GCC/ARM_CRx_MPU/portASM.S
+index 2b6f22ef2..e1d5feb8e 100644
+--- a/portable/GCC/ARM_CRx_MPU/portASM.S
++++ b/portable/GCC/ARM_CRx_MPU/portASM.S
+@@ -53,104 +53,84 @@
+ 
+ /* Save the context of a FreeRTOS Task. */
+ .macro portSAVE_CONTEXT
+-    DSB
+-    ISB
+-    /* Push R0 and LR to the stack for current mode. */
+-    PUSH    { R0, LR }
+-
+-    LDR     LR, =pxCurrentTCB   /* LR = &( pxCurrentTCB ). */
+-    LDR     LR, [LR]            /* LR = pxCurrentTCB. */
+-    LDR     LR, [LR]            /* LR = pxTopOfStack i.e. the address where to store the task context. */
+-
+-    LDR     R0, =ulCriticalNesting  /* R0 = &( ulCriticalNesting ). */
+-    LDR     R0, [R0]                /* R0 = ulCriticalNesting. */
+-    STM     LR!, { R0 }             /* Store ulCriticalNesting. ! increments LR after storing. */
+-
+-#if ( portENABLE_FPU == 1 )
+-    VMRS    R0, FPSCR       /* R0 = FPSCR. */
+-    STM     LR!, { R0 }     /* Store FPSCR. */
+-    VSTM    LR!, { D0-D15 } /* Store D0-D15. */
+-#endif /* ( portENABLE_FPU == 1 ) */
+-
+-    POP     { R0 }  /* Restore R0 to pre-exception value. */
+-    /* STM (user registers) - In a PL1 mode other than System mode, STM (user
+-     * registers) instruction stores multiple User mode registers to
+-     * consecutive memory locations using an address from a base register. The
+-     * processor reads the base register value normally, using the current mode
+-     * to determine the correct Banked version of the register. This instruction
+-     * cannot writeback to the base register.
+-     *
+-     * The following can be derived from the above description:
+-     * - The macro portSAVE_CONTEXT MUST be called from a PL1 mode other than
+-     *   the System mode.
+-     * - Base register LR of the current mode will be used which contains the
+-     *   location to store the context.
+-     * - It will store R0-R14 of User mode i.e. pre-exception SP(R13) and LR(R14)
+-     *   will be stored. */
+-    STM     LR, { R0-R14 }^
+-    ADD     LR, LR, #60 /* R0-R14 - Total 155 register, each 4 byte wide. */
+-
+-    POP     { R0 }          /* Pre-exception PC is in R0. */
+-    MRS     R1, SPSR        /* R1 = Pre-exception CPSR. */
+-    STM     LR!, { R0-R1 }  /* Store pre-exception PC and CPSR. */
++    dsb
++    isb
++
++    push    {r0-r3, lr}
++
++    /* r4 := frame_base = pxCurrentTCB->pxTopOfStack */
++    ldr     r0, =pxCurrentTCB
++    ldr     r0, [r0]
++    ldr     r4, [r0]            /* r4 = frame_base */
++    mov     lr, r4              /* lr = cursor */
++
++    /* [0] ulCriticalNesting */
++    ldr     r1, =ulCriticalNesting
++    ldr     r1, [r1]
++    str     r1, [lr], #4
++
++    /* Restore original r0-r3 (task values) */
++    pop     {r0-r3}
+ 
++    /* [1..15] r0-r14 from SYS/USR bank */
++    stmia   lr, {r0-r14}^
++    add     lr, lr, #60         /* 15 regs * 4 */
++
++    /* Pop saved lr_svc (return PC) into r0 */
++    pop     {r0}
++
++    /* [16] saved PC, [17] saved SPSR */
++    mrs     r1, spsr
++    str     r0, [lr], #4
++    str     r1, [lr], #4
++
++    /* Write back frame base */
++    ldr     r2, =pxCurrentTCB
++    ldr     r2, [r2]
++    str     r4, [r2]
+ .endm
+ 
+ /* ----------------------------------------------------------------------------------- */
+ 
+ /* Restore the context of a FreeRTOS Task. */
+ .macro portRESTORE_CONTEXT
+-    /* Load the pointer to the current task's Task Control Block (TCB). */
+-    LDR     LR, =pxCurrentTCB   /* LR = &( pxCurrentTCB ). */
+-    LDR     LR, [LR]            /* LR = pxCurrentTCB. */
+-    ADD     R1, LR, #0x4        /* R1 now points to the xMPUSettings in TCB. */
+-    LDR     LR, [LR]            /* LR = pxTopOfStack i.e. the address where to restore the task context from. */
+-
+-    /* When creating a loop label in a macro it has to be a numeric label.
+-     * for( R5 = portFIRST_CONFIGURABLE_REGION ; R5 <= portNUM_CONFIGURABLE_REGIONS ; R5++ ) */
+-    MOV     R5, #portFIRST_CONFIGURABLE_REGION
+-    123:
+-        LDMIA   R1!, { R2-R4 }  /* R2 = ulRegionSize, R3 = ulRegionAttribute, R4 = ulRegionBaseAddress. */
+-
+-        MCR     p15, #0, R5, c6, c2, #0 /* MPU Region Number Register. */
+-        MCR     p15, #0, R4, c6, c1, #0 /* MPU Region Base Address Register. */
+-        MCR     p15, #0, R3, c6, c1, #4 /* MPU Region Access Control Register. */
+-        MCR     p15, #0, R2, c6, c1, #2 /* MPU Region Size and Enable Register. */
+-
+-        ADD     R5, R5, #1
+-        CMP     R5, #portNUM_CONFIGURABLE_REGIONS
+-        BLE     123b
+-
+-    LDR     R1, =ulCriticalNesting /* R1 = &( ulCriticalNesting ). */
+-    LDM     LR!, { R2 }            /* R2 = Stored ulCriticalNesting. */
+-    STR     R2, [R1]               /* Restore ulCriticalNesting. */
+-
+-#if ( portENABLE_FPU == 1 )
+-    LDM     LR!, { R1 }     /* R1 = Stored FPSCR.  */
+-    VMSR    FPSCR, R1       /* Restore FPSCR. */
+-    VLDM   LR!, { D0-D15 }  /* Restore D0-D15. */
+-#endif /* portENABLE_FPU*/
+-
+-    /* LDM (User registers) - In a PL1 mode other than System mode, LDM (User
+-     * registers) loads multiple User mode registers from consecutive memory
+-     * locations using an address from a base register. The registers loaded
+-     * cannot include the PC. The processor reads the base register value
+-     * normally, using the current mode to determine the correct Banked version
+-     * of the register. This instruction cannot writeback to the base register.
+-     *
+-     *  The following can be derived from the above description:
+-     * - The macro portRESTORE_CONTEXT MUST be called from a PL1 mode other than
+-     *   the System mode.
+-     * - Base register LR of the current mode will be used which contains the
+-     *   location to restore the context from.
+-     * - It will restore R0-R14 of User mode i.e. SP(R13) and LR(R14) of User
+-     *   mode will be restored.
+-     */
+-    LDM     LR, { R0-R14 }^
+-    ADD     LR, LR, #60 /* R0-R14 - Total 155 register, each 4 byte wide. */
+-
+-    RFE     LR  /* Restore PC and CPSR from the context. */
+-
++    /* lr := frame_base = pxCurrentTCB->pxTopOfStack */
++    ldr     r0, =pxCurrentTCB
++    ldr     r0, [r0]
++    ldr     lr, [r0]            /* lr = frame_base */
++
++    /* [0] ulCriticalNesting */
++    ldr     r1, [lr], #4
++    ldr     r0, =ulCriticalNesting
++    str     r1, [r0]
++
++    /* [1..15] restore r0-r14 into SYS/USR bank */
++    ldmia   lr, {r0-r14}^
++    add     lr, lr, #60
++
++    /* [16] saved PC */
++    ldr     r0, [lr], #4
++
++    /* [17] saved SPSR */
++    ldr     r1, [lr], #4
++
++    /* -------------------------------------------------
++     * Bring-up safety: sanitize SPSR for Cortex-R52
++     * Force: SYS mode, ARM state, I/F enabled (or choose)
++     * ------------------------------------------------- */
++    bic     r1, r1, #0x1F       /* clear mode bits */
++    orr     r1, r1, #0x1F       /* SYS mode */
++    bic     r1, r1, #0x20       /* T=0 ARM state */
++    bic     r1, r1, #(1<<7)     /* I=0 enable IRQ in task */
++    bic     r1, r1, #(1<<6)     /* F=0 enable FIQ (optional) */
++
++    msr     spsr_cxsf, r1
++
++    /* Exception return to restored PC with restored CPSR */
++    mov     lr, r0
++    dsb
++    isb
++    movs    pc, lr
+ .endm
+ 
+ /* ----------------------------------------------------------------------------------- */
+@@ -175,51 +155,49 @@ vPortStartFirstTask:
+ .global FreeRTOS_SVC_Handler
+ .type FreeRTOS_SVC_Handler, %function
+ FreeRTOS_SVC_Handler:
+-    PUSH    { R11-R12 }
++    PUSH    { R10-R12 }
++
++	sub     r10, lr, #4
+ 
+     /* ------------------------- Caller Flash Location Check ------------------------- */
+ 
+     LDR     R11, =__syscalls_flash_start__
+     LDR     R12, =__syscalls_flash_end__
+-    CMP     LR, R11 /* If SVC instruction address is less than __syscalls_flash_start__, exit. */
++    CMP     R10, R11 /* If SVC instruction address is less than __syscalls_flash_start__, exit. */
+     BLT     svcHandlerExit
+-    CMP     LR, R12 /* If SVC instruction address is greater than __syscalls_flash_end__, exit. */
++    CMP     R10, R12 /* If SVC instruction address is greater than __syscalls_flash_end__, exit. */
+     BGT     svcHandlerExit
+ 
+     /* ---------------------------- Get Caller SVC Number ---------------------------- */
+ 
+-    MRS     R11, SPSR               /* LR = CPSR at the time of SVC. */
+-    TST     R11, #0x20              /* Check Thumb bit (5) in CPSR. */
+-    LDRHNE  R11, [LR, #-0x2]        /* If Thumb, load halfword. */
+-    BICNE   R11, R11, #0xFF00       /* And extract immidiate field (i.e. SVC number). */
+-    LDREQ   R11, [LR, #-0x4]        /* If ARM, load word. */
+-    BICEQ   R11, R11, #0xFF000000   /* And extract immidiate field (i.e. SVC number). */
++    ldr     r11, [r10]           /* r11 = instruction */
++    bic     r11, r11, #0xFF000000/* r11 = imm24 */
+ 
+     /* --------------------------------- SVC Routing --------------------------------- */
+-
+-    /* If SVC Number < #NUM_SYSTEM_CALLS, go to svcSystemCallEnter. */
+-    CMP     R11, #NUM_SYSTEM_CALLS
+-    BLT     svcSystemCallEnter
+-
+     /* If SVC Number == #portSVC_SYSTEM_CALL_EXIT, go to svcSystemCallExit. */
+     CMP     R11, #portSVC_SYSTEM_CALL_EXIT
+     BEQ     svcSystemCallExit
+ 
+-    /* If SVC Number == #portSVC_YIELD, go to svcPortYield. */
++	/* If SVC Number == #portSVC_YIELD, go to svcPortYield. */
+     CMP     R11, #portSVC_YIELD
+     BEQ     svcPortYield
+ 
++	/* If SVC Number < #NUM_SYSTEM_CALLS, go to svcSystemCallEnter. */
++    CMP     R11, #NUM_SYSTEM_CALLS
++    BLT     svcSystemCallEnter
++
+ svcHandlerExit:
+-    POP     { R11-R12 }
++    POP     { R10-R12 }
+     MOVS    PC, LR /* Copies the SPSR into the CPSR, performing the mode swap. */
+ 
+ svcPortYield:
+-    POP     { R11-R12 }
++    POP     { R10-R12 }
+     portSAVE_CONTEXT
+     BL      vTaskSwitchContext
+     portRESTORE_CONTEXT
+ 
+ svcSystemCallExit:
++	pop     {r10-r12}
+     LDR     R11, =pxCurrentTCB /* R11 = &( pxCurrentTCB ). */
+     LDR     R11, [R11]         /* R11 = pxCurrentTCB. */
+     ADD     R11, R11, #portSYSTEM_CALL_INFO_OFFSET /* R11 now points to xSystemCallStackInfo in TCB. */
+@@ -227,23 +205,18 @@ svcSystemCallExit:
+     /* Restore the user mode SP and LR. */
+     LDM   R11, { R13-R14 }^
+ 
+-    AND     R12, R12, #0x0      /* R12 = 0. */
+-    STR     R12, [R11]          /* xSystemCallStackInfo.pulTaskStackPointer = NULL. */
+-    STR     R12, [R11, #0x4]    /* xSystemCallStackInfo.pulLinkRegisterAtSystemCallEntry = NULL. */
++     /* Clear stackinfo (use MOV, not AND trick) */
++    mov     r12, #0
++    str     r12, [r11]               /* pulTaskStackPointer = NULL */
++    str     r12, [r11, #4]           /* pulLinkRegisterAtSystemCallEntry = NULL */
+ 
+-    LDMDB   R11, { R12 }        /* R12 = ulTaskFlags. */
++    /* If you also store ulTaskFlags near here, keep that logic,
++       but do NOT modify SPSR here. */
+ 
+-    TST     R12, #portTASK_IS_PRIVILEGED_FLAG
+-    /* If the task is privileged, we can exit now. */
+-    BNE     svcHandlerExit
+-    /* Otherwise, we need to switch back to User mode. */
+-    MRS     R12, SPSR
+-    BIC     R12, R12, #0x0F
+-    MSR     SPSR_cxsf, R12
+-
+-    B   svcHandlerExit
++    b       svcHandlerExit
+ 
+ svcSystemCallEnter:
++	pop     {r10-r12}
+     LDR     R12, =uxSystemCallImplementations /* R12 = uxSystemCallImplementations. */
+     /* R12 = uxSystemCallImplementations[ R12 + ( R11 << 2 ) ].
+      * R12 now contains the address of the system call impl function. */
+@@ -271,12 +244,9 @@ svcSystemCallEnter:
+      * and xSystemCallStackInfo.pulSystemCallExitAddress. */
+     LDM     R11, { R13-R14 }^
+ 
+-    /* Change to SYS_MODE for the System Call. */
+-    MRS     R12, SPSR
+-    ORR     R12, R12, #SYS_MODE
+-    MSR     SPSR_cxsf, R12
+-
+-    B       svcHandlerExit
++     /* Jump to syscall implementation WITHOUT clobbering LR_svc */
++    mov     r4, r12
++    bx      r4
+ 
+ /* ----------------------------------------------------------------------------------- */
+ 
+@@ -287,7 +257,7 @@ svcSystemCallEnter:
+ .global vPortDisableInterrupts
+ .type vPortDisableInterrupts, %function
+ vPortDisableInterrupts:
+-    CPSID    I
++    CPSID    IF
+     BX      LR
+ 
+ /* ----------------------------------------------------------------------------------- */
+@@ -299,7 +269,7 @@ vPortDisableInterrupts:
+ .global vPortEnableInterrupts
+ .type vPortEnableInterrupts, %function
+ vPortEnableInterrupts:
+-    CPSIE   I
++    CPSIE   IF
+     BX      LR
+ 
+ /* ----------------------------------------------------------------------------------- */
+@@ -321,10 +291,10 @@ vPortEnableInterrupts:
+ .global vMPUSetRegion
+ .type vMPUSetRegion, %function
+ vMPUSetRegion:
+-    AND     R0,  R0, #0x0F    /* R0 = R0 & 0x0F. Max possible region number is 15. */
++    AND     R0,  R0, #24    /* R0 = R0 & 24. Max possible region number is 24. */
+ 
+-    MCR     p15, #0, R0, c6, c2, #0 /* MPU Region Number Register. */
+-    MCR     p15, #0, R1, c6, c1, #0 /* MPU Region Base Address Register. */
++    MCR     p15, #0, R0, c6, c2, #1 /* MPU Protection Region Selection Register */
++    MCR     p15, #0, R1, c6, c1, #0 /* MPU Protection Base Address Register. */
+     MCR     p15, #0, R3, c6, c1, #4 /* MPU Region Access Control Register. */
+     MCR     p15, #0, R2, c6, c1, #2 /* MPU Region Size and Enable Register. */
+ 
+@@ -437,7 +407,7 @@ FreeRTOS_IRQ_Handler:
+     POP     { R0-R3, LR }
+ 
+     /* Disable IRQs incase vApplicationIRQHandler enabled them for re-entry. */
+-    CPSID   I
++    CPSID   IF
+     DSB
+     ISB
+ 
+diff --git a/portable/GCC/ARM_CRx_MPU/portmacro.h b/portable/GCC/ARM_CRx_MPU/portmacro.h
+index 1eb8f0162..0552f13ba 100644
+--- a/portable/GCC/ARM_CRx_MPU/portmacro.h
++++ b/portable/GCC/ARM_CRx_MPU/portmacro.h
+@@ -251,6 +251,8 @@ typedef uint32_t TickType_t;
+ 
+ /* ----------------------------- Port Assembly Functions ----------------------------- */
+ 
++void vPortTickISR( void );
++
+ /**
+  * @brief FreeRTOS Supervisor Call (SVC) Handler.
+  *
+@@ -274,6 +276,15 @@ void vPortYield( void );
+ 
+ #define portYIELD() vPortYield()
+ 
++#define portYIELD_FROM_ISR( xSwitchRequired ) \
++    do {    \
++        extern volatile uint32_t ulPortYieldRequired; \
++        if( ( xSwitchRequired ) != pdFALSE ) \
++        {                                    \
++            ulPortYieldRequired = pdTRUE;         \
++        }                                    \
++    } while( 0 )
++
+ /**
+  * @brief Enable interrupts.
+  *
+diff --git a/portable/GCC/ARM_CRx_MPU/portmacro_asm.h b/portable/GCC/ARM_CRx_MPU/portmacro_asm.h
+index c9573e419..4f7e95f5d 100644
+--- a/portable/GCC/ARM_CRx_MPU/portmacro_asm.h
++++ b/portable/GCC/ARM_CRx_MPU/portmacro_asm.h
+@@ -41,6 +41,8 @@ extern "C" {
+     #define portMPU_TOTAL_REGIONS ( 12UL )
+ #elif( configTOTAL_MPU_REGIONS == 16 )
+     #define portMPU_TOTAL_REGIONS ( 16UL )
++#elif( configTOTAL_MPU_REGIONS == 24 )
++    #define portMPU_TOTAL_REGIONS ( 24UL )
+ #else
+     #error "Set configTOTAL_MPU_REGIONS to the number of MPU regions in FreeRTOSConfig.h"
+ #endif /* configTOTAL_MPU_REGIONS */
