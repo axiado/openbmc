@@ -1,0 +1,47 @@
+From: Kuan-Jui Chiu <kchiu@axiado.com>
+Date: 2026-05-18 00:00:00
+Subject: [PATCH] sysmgr: link against prebuilt libbali-hal-impl from sysroot
+
+Drop the in-tree rebuild of bali-hal-impl (previously pulled in via
+add_subdirectory of bali_hal/platform/ax-ultra) and declare it as a
+CMake IMPORTED target that resolves to the static archive staged by
+the bali-hal recipe at recipe-sysroot/usr/lib/bali-hal/libbali-hal-impl.a.
+
+The base subtree is still entered directly so the kconfig step still
+generates autoconf.h (consumed by sysmgr/src/openbic/* sources) and
+libbase_hal.a remains available for linking.
+
+Upstream-Status: Inappropriate [Yocto packaging adaptation]
+Signed-off-by: Kuan-Jui Chiu <kchiu@axiado.com>
+---
+ sysmgr/CMakeLists.txt | 18 +++++++++++++++++-
+ 1 file changed, 17 insertions(+), 1 deletion(-)
+
+diff --git a/sysmgr/CMakeLists.txt b/sysmgr/CMakeLists.txt
+--- a/sysmgr/CMakeLists.txt
++++ b/sysmgr/CMakeLists.txt
+@@ -57,7 +57,23 @@ add_compile_definitions(
+ set(COMPILE_ARG_FILE ${AXBASE_PATH}/r52-compile-args.cmake)
+ include(${COMPILE_ARG_FILE})
+
+-add_subdirectory("${BALI_PLATFORM_PATH}" "${CMAKE_BINARY_DIR}/bali_plat_build")
++# Build the base subtree directly so the kconfig step still produces
++# autoconf.h, which is included by sysmgr/src/openbic/* sources.
++add_subdirectory("${AXBASE_PATH}" "${CMAKE_BINARY_DIR}/axbuild")
++
++set(BALI_HAL_PREBUILT_DIR "${CMAKE_SYSROOT}/usr/lib/bali-hal"
++    CACHE PATH "Directory containing the prebuilt bali-hal-impl static library")
++set(BALI_HAL_IMPL_LIB "${BALI_HAL_PREBUILT_DIR}/libbali-hal-impl.a")
++if(NOT EXISTS "${BALI_HAL_IMPL_LIB}")
++    message(FATAL_ERROR
++        "Prebuilt bali-hal-impl not found at ${BALI_HAL_IMPL_LIB} - "
++        "is the bali-hal recipe staged into the sysroot?")
++endif()
++
++add_library(bali-hal-impl STATIC IMPORTED GLOBAL)
++set_target_properties(bali-hal-impl PROPERTIES
++    IMPORTED_LOCATION "${BALI_HAL_IMPL_LIB}"
++    INTERFACE_LINK_LIBRARIES base_hal)
+
+ # Disable shadow warning only for ARM_CRx_MPU port.c
+ set_source_files_properties(
