@@ -15,3 +15,5 @@ FLASH_RWFS_OFFSET = "65535"
 WKS_FILE ?= "emmc-ax3005.wks.in"
 WKS_FILE_DEPENDS ?= "virtual/bootloader"
 IMAGE_FSTYPES += "wic.xz"
+
+IMAGE_CLASSES += "image_types_ax3005"
