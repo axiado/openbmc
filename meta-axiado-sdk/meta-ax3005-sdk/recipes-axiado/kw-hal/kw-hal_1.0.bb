@@ -1,4 +1,4 @@
-require bali-hal.inc
+require kw-hal.inc
 
 SRCREV_FORMAT += "_ax-bsp-headers"
 SRCREV_kw-hal = "53919ed17e467fca24d72782c3b8c138fec227cf"
