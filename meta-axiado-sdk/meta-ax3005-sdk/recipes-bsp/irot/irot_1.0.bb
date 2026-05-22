@@ -28,7 +28,7 @@ SRCREV_caliptra-sw = "11a5c54aa192b41fa9ca4e11aa9de78d26425c90"
 S = "${WORKDIR}/git"
 B = "${WORKDIR}/build"
 
-DEPENDS = "cmake-native gcc-arm-none-eabi-native bali-hal"
+DEPENDS = "cmake-native gcc-arm-none-eabi-native kw-hal"
 
 do_configure() {
     mkdir -p ${B}

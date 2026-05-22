@@ -1,4 +1,4 @@
-require bali-hal.inc
+require kw-hal.inc
 
 SRCREV_kw-hal = "22c0c4c286346a682eda890c85365fef1e2856b1"
 SRCREV_ax-hal = "314c626b6ff3a29268955d4920aa7916dfa69c55"
