@@ -1,13 +1,30 @@
-Introduction
-------------
+# Introduction
 
-This repository contains the layers for Axiado TCU.
+## This repository contains the layers for Axiado TCU.
 
-* meta-common
+* meta-ax3000-sdk
 
-  This layer contains .bbappend to revise the general recipes in OpenBMC.
+  This layer contains the following recipes for Axiado AX3000 SoC :
+  U-boot    : 2019.04
+  kernel    : 6.6.106
+  Logmgr    : Axiado log manager
+  Provision : Axiado signing tool
+  Sysproxy  : System manager proxy
+  TDFU      : Tool for TCU device firmware update
 
-* meta-evk
+* meta-ax3005-sdk
+
+  This layer contains the following recipes for Axiado AX3005 SoC :
+  U-boot             : 2026.04
+  kernel             : 6.6.106
+  Logmgr             : Axiado log manager
+  Caliptra-sw        : Caliptra firmware and software
+  Kw-hal             : A hardware abstraction layer (HAL) SDK with FreeRTOS integration
+  Optee-os           : OP-TEE Trusted OS
+  Trusted-firmware-a : Trusted Firmware for A profile Arm CPUs
+  Irot               : Axiado iRoT firmware
+
+* meta-evb
 
   This layer contains the basic builds for Axiado TCU.
 
@@ -15,8 +32,7 @@ This repository contains the layers for Axiado TCU.
 
   These layers contain the reference builds for AMD/Intel/Nvidia platforms based on Axiado TCU.
 
-Others
-------
+## Others
 
 * recipes-axiado
 
@@ -30,15 +46,20 @@ Others
 
   This dirctory contains Axiado Linux kernel and modules.
 
-Additional information
-----------------------
+## Additional information
 
 Axiado offers two versions of recipes:
 v1.0 for internal access
 v0.1 for external build which includes pre-built binaries
 
-Prerequisite for building Caliptra-sw with Axiado SDK
-----------------------
+## Prerequisite for signing images for Ax3000 SoC with Axiado SDK
+
+```sh
+git clone https://github.com/axiado/kirkwood-image-tool.git
+pip install -r kirkwoods-image-tool/requirements.txt
+```
+
+## Prerequisite for building Caliptra-sw for Ax3005 SoC with Axiado SDK
 
 ```sh
 curl --proto --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
@@ -47,9 +68,7 @@ rustup toolchain install 1.85
 rustup target add riscv32imc-unknown-none-elf --toolchain 1.85
 ```
 
-
-Setting up
-----------
+## Setting up
 
 1) Download the source
 
@@ -59,13 +78,48 @@ git clone https://github.com/axiado/openbmc.git
 
 2) Target hardware
 
-Refer the README in meta-* for available machine
+```
+. setup <MACHINE> [BUILD_DIR]
+Available machines:
+evk-axiado-github
+evk-ax3005-github
+```
+
+- Ax3000 SoC
 
 ```sh
-. setup evk-axiado-github
+. setup evk-axiado-github [BUILD_DIR]
+```
+
+- Ax3005 SoC
+
+```sh
+. setup evk-ax3005-github [BUILD_DIR]
 ```
 
 3) Build
+
 ```sh
 bitbake obmc-phosphor-image
 ```
+
+## Artifacts
+
+The output images locates at ${BUILD_DIR}/tmp/deploy/images/${MACHINE}/
+
+###  Boot with Axiado signature images for Ax3000 SoC
+- `u-boot-${MACHINE}.bin` : Original u-boot image
+- `fitImage-${MACHINE}.bin` : Original kernel image in FIT format including DTBs and initramfs
+- `obmc-phosphor-image-${MACHINE}.wic.xz` : Compressed mmc image with pre-defined layout for user partition
+- `obmc-phosphor-image-${MACHINE}.ext4.mmc.tar` : Compressed BMC images with Axiado signature for firmware update
+
+###  Boot with Caliptra manifest image for Ax3005 SoC
+- `u-boot-${MACHINE}.bin` : Original u-boot image
+- `fitImage-${MACHINE}.bin` : Original kernel image in FIT format including DTBs and initramfs
+- `obmc-phosphor-image-${MACHINE}.squashfs-xz` : Compressed ROFS image
+- `obmc-phosphor-image-${MACHINE}.wic.xz` : Compressed mmc image with pre-defined layout for user partition
+- `sbl.bin` : Axiado secondary bootloader image
+- `image-bundle.bin` : Caliptra bundle image
+- `sysmgr.bin` : Axiado iRoT image
+- `secmc.img.ebin` : Security Management Complex image
+- `axiado-flash-${MACHINE}.bin` : Axiado bundle image for SPI flash
