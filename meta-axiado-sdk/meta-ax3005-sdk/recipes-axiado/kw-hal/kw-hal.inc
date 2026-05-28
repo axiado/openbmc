@@ -7,7 +7,7 @@ SECTION = "axiado/firmware"
 # documented in bali_hal/LICENSES/ (FreeRTOS-MIT, CMSIS-Apache-2.0, mbedTLS-Apache-2.0)
 LICENSE = "CLOSED"
 
-SRCREV_FORMAT = "kw-hal_ax-bsp-headers_ax-hal_bali-hal_caliptra-sw"
+SRCREV_FORMAT = "kw-hal_ax-hal_bali-hal_caliptra-sw"
 SRC_URI = "${SRC_URI_KW_HAL};branch=${SRCBRANCH};name=kw-hal \
            ${SRC_URI_AX_HAL};branch=${SRCBRANCH};name=ax-hal;destsuffix=git/ax_hal \
            ${SRC_URI_BAIL_HAL};branch=${SRCBRANCH};name=bali-hal;destsuffix=git/bali_hal \

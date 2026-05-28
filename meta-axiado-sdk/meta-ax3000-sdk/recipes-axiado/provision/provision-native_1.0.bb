@@ -1,6 +1,6 @@
 require provision.inc
 
-PV = "1.0"
+PV = "1.0+dev"
 
 SRCREV = "1b3a809d87de4b8bc88dd6434b0f00f9a20414e6"
 SRCBRANCH = "release/release-0.18.0"

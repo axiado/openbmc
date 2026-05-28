@@ -1,6 +1,6 @@
 require sysproxy.inc
 
-PV = "1.0"
+PV = "1.0+dev"
 
 SRCBRANCH = "release/release-0.18.0"
 SRCBRANCH_qpc = "release/release-7.1.0"

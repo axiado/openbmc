@@ -8,7 +8,7 @@ LIC_FILES_CHKSUM = "file://LICENSE;md5=86d3f3a95c324c9479bd8986968f4327"
 S = "${WORKDIR}/git"
 B = "${WORKDIR}/build"
 
-inherit cargo
+inherit cargo deploy
 
 # Disable the class's built-in vendoring; crates are fetched directly from the
 # network during do_compile.
@@ -55,4 +55,15 @@ do_install() {
     install -m 0644 ${B}/image-bundle.bin ${D}${nonarch_base_libdir}/firmware/caliptra/image-bundle.bin
 }
 
+# Ensure to remove the pre-built one
+do_deploy[depends] += "bmc-pb:do_deploy"
+do_deploy() {
+    if [ -e "${DEPLOY_DIR_IMAGE}"/image-bundle.bin ]; then
+        rm ${DEPLOY_DIR_IMAGE}/image-bundle.bin
+    fi
+    install -m 0644 ${B}/image-bundle.bin ${DEPLOYDIR}
+}
+
 FILES:${PN} += "${nonarch_base_libdir}/firmware/caliptra/image-bundle.bin"
+
+addtask do_deploy before do_build after do_install

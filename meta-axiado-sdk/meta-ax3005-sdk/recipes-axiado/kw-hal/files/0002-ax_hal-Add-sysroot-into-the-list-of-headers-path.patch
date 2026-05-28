@@ -1,0 +1,26 @@
+From e1dc35b46923b979cbb0d89c8aef6e3fc9c09774 Mon Sep 17 00:00:00 2001
+From: Kuan-Jui Chiu <kchiu@axiado.com>
+Date: Wed, 27 May 2026 03:46:08 -0700
+Subject: [PATCH] ax_hal: Add sysroot into the list of headers path
+
+Upstream-Status: Inappropriate [Yocto packaging adaptation]
+Signed-off-by: Kuan-Jui Chiu <kchiu@axiado.com>
+---
+ CMakeLists.txt | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 0caf44b2..485ceadb 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -57,6 +57,7 @@ message(NOTICE "Setting Library directory to ${PROJECT_LIB_DIR}")
+ set_target_properties(axhal PROPERTIES
+ 	ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_LIB_DIR})
+ 
++target_include_directories(axhal PUBLIC ${RECIPE_SYSROOT_INCLUDE_DIR})
+ target_include_directories(axhal PUBLIC ${AXHAL_ROOT}/../ax-bsp-headers)
+ target_include_directories(axhal PUBLIC ${AXHAL_ROOT}/../base/include)
+ target_include_directories(axhal PRIVATE ${AXHAL_INCLUDES})
+-- 
+2.34.1
+

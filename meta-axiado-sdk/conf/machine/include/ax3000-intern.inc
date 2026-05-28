@@ -1,0 +1,7 @@
+PREFERRED_VERSION_u-boot-axiado = "2020.04+dev"
+PREFERRED_VERSION_linux-axiado = "6.6.16+dev"
+PREFERRED_VERSION_logmgr = "1.0+dev"
+PREFERRED_VERSION_provision-native = "1.0+dev"
+PREFERRED_VERSION_sysproxy = "1.0+dev"
+PREFERRED_VERSION_tdfu = "1.0+dev"
+PREFERRED_VERSION_bmc-pb = "1.0+dev"

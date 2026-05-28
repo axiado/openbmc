@@ -2,7 +2,7 @@
 SUMMARY = "Log Manager"
 DESCRIPTION = "Log Manager application to manage TCU logs"
 LICENSE = "CLOSED"
-PV = "0.1"
+PV = "1.0+git"
 
 inherit obmc-phosphor-systemd
 
