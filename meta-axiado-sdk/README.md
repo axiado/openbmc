@@ -5,24 +5,25 @@
 * meta-ax3000-sdk
 
   This layer contains the following recipes for Axiado AX3000 SoC :
-  U-boot    : 2019.04
-  kernel    : 6.6.106
-  Logmgr    : Axiado log manager
-  Provision : Axiado signing tool
-  Sysproxy  : System manager proxy
-  TDFU      : Tool for TCU device firmware update
+  - `U-boot`    : 2019.04
+  - `kernel`    : 6.6.106
+  - `Logmgr`    : Axiado log manager
+  - `Provision` : Axiado signing tool
+  - `Sysproxy`  : System manager proxy
+  - `TDFU`      : Tool for TCU device firmware update
 
 * meta-ax3005-sdk
 
   This layer contains the following recipes for Axiado AX3005 SoC :
-  U-boot             : 2026.04
-  kernel             : 6.6.106
-  Logmgr             : Axiado log manager
-  Caliptra-sw        : Caliptra firmware and software
-  Kw-hal             : A hardware abstraction layer (HAL) SDK with FreeRTOS integration
-  Optee-os           : OP-TEE Trusted OS
-  Trusted-firmware-a : Trusted Firmware for A profile Arm CPUs
-  Irot               : Axiado iRoT firmware
+  - `U-boot`             : 2026.04
+  - `kernel`             : 6.6.106
+  - `Logmgr`             : Axiado log manager
+  - `Caliptra-sw`        : Caliptra firmware and software
+  - `Kw-hal`             : A hardware abstraction layer (HAL) SDK with FreeRTOS integration
+  - `Optee-os`           : OP-TEE Trusted OS
+  - `Trusted-firmware-a` : Trusted Firmware for A profile Arm CPUs
+  - `Irot`               : Axiado iRoT firmware
+  - `Caliptra-img-gen`   : Axiado tool to generate image for SPI flash programming
 
 * meta-evb
 
@@ -45,12 +46,6 @@
 * recipes-kernel
 
   This dirctory contains Axiado Linux kernel and modules.
-
-## Additional information
-
-Axiado offers two versions of recipes:
-v1.0 for internal access
-v0.1 for external build which includes pre-built binaries
 
 ## Prerequisite for signing images for Ax3000 SoC with Axiado SDK
 
@@ -122,4 +117,6 @@ The output images locates at ${BUILD_DIR}/tmp/deploy/images/${MACHINE}/
 - `image-bundle.bin` : Caliptra bundle image
 - `sysmgr.bin` : Axiado iRoT image
 - `secmc.img.ebin` : Security Management Complex image
+- `tee-pager_v2.bin` : OP-TEE image
+- `bl31.bin` : Trusted Firmware A image
 - `axiado-flash-${MACHINE}.bin` : Axiado bundle image for SPI flash
