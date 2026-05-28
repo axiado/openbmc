@@ -3,7 +3,7 @@
 SUMMARY = "Sysproxy"
 SECTION = "Sysproxy application"
 LICENSE = "CLOSED"
-PV = "0.1"
+PV = "1.0+git"
 
 inherit obmc-phosphor-systemd
 

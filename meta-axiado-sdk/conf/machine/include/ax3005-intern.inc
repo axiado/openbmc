@@ -1,0 +1,7 @@
+PREFERRED_VERSION_u-boot-axiado = "2026.04+dev"
+PREFERRED_VERSION_linux-axiado = "6.6.16+dev"
+PREFERRED_VERSION_logmgr = "1.0+dev"
+PREFERRED_VERSION_kw-hal = "1.0+dev"
+PREFERRED_VERSION_caliptra-sw = "1.2.4+dev"
+PREFERRED_VERSION_bmc-pb = "1.0+dev"
+PREFERRED_VERSION_secureboot-image = "1.0+dev"

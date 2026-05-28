@@ -3,7 +3,7 @@
 SUMMARY = "tdfu"
 DESCRIPTION = "TCU Firmware Upgrade Application"
 LICENSE = "CLOSED"
-PV = "0.1"
+PV = "1.0+git"
 
 SRC_URI = "file://ax3000-fw-update"
 

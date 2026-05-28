@@ -14,7 +14,7 @@ SRC_URI_CALIPTRA_SW = "gitsm://github.com/axiado/caliptra-sw.git;protocol=https"
 
 SRC_URI += "file://0001-freertos_r52_kernel_support.patch;patchdir=${S}/bali_hal/library/FreeRTOS-Kernel \
             file://0003-r52-compile-args-limit-ffreestanding-to-c-asm.patch;patchdir=${S} \
-            file://0004-ax-ultra-cmake-limit-ffreestanding-to-c-asm.patch;patchdir=${S} \
+            file://0004-ax-ultra-cmake-limit-ffreestanding-to-c-asm.patch;patchdir=${S}/bali_hal \
             file://0005-ax-hal-libcaliptra-pass-cflags.patch;patchdir=${S}/ax_hal \
             "
 PV = "1.0+git"

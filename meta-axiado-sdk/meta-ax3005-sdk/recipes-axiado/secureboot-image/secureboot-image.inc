@@ -3,6 +3,8 @@ DESCRIPTION = "Recipe to generate flash image for ax3005 SoC"
 
 LICENSE = "CLOSED"
 
+inherit deploy
+
 DEPENDS += "u-boot virtual/kernel bmc-pb caliptra-image-tool-native"
 DEPENDS += '${@oe.utils.conditional("USE_CALIPTRA_DUMMY_KEYS", "1", "crypto-tool-native", "", d)}'
 
@@ -56,18 +58,17 @@ do_generate_signatures() {
     :
 }
 
-# do_deploy[depends] += "caliptra-image-tool-native:do_populate_sysroot"
 do_compile() {
     # Generate flash.bin
     AxImgGen ax-flash-image -c ax-flash.toml -w ${S}
 }
 
 do_deploy() {
-    cp ${S}/artifacts/flash.bin ${DEPLOY_DIR_IMAGE}/axiado-flash-${MACHINE}.bin
+    install -m 0644 ${S}/artifacts/flash.bin ${DEPLOYDIR}/axiado-flash-${MACHINE}.bin
 }
 
 addtask do_prepare_keys after do_configure
 addtask do_generate_digest after do_prepare_keys
 addtask do_generate_signatures after do_generate_digest
 addtask do_compile after do_generate_signatures
-addtask do_deploy after do_compile
+addtask do_deploy after do_compile before do_build

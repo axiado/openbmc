@@ -1,6 +1,6 @@
 require provision.inc
 
-PV = "0.1"
+PV = "1.0+git"
 
 SRCREV = "4fdfb389479b76631ebe6964c86a22aa15a6bd22"
 SRC_URI = "git://git@github.com/axiado/kirkwood-image-tool;protocol=ssh;branch=develop"

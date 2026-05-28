@@ -6,6 +6,8 @@ LICENSE = "CLOSED"
 
 LIC_FILES_CHKSUM ?= "file://${COREBASE}/meta-axiado-sdk/COPYING.axiado;md5=3da9cfbcb788c80a0384361b4de20420"
 
+inherit native
+
 DEPENDS += "u-boot virtual/kernel python3-build-native"
 
 do_configure[depends] += "virtual/bootloader:do_deploy virtual/kernel:do_deploy"

@@ -2,9 +2,6 @@ SUMMARY = "Axiado Pre-built binaries for Axiado SoC family"
 
 LICENSE = "CLOSED"
 
-SRCREV = "84a31e920cc0b2ba69ec296fe7dd120755377545"
-SRC_URI = "git://git@github.com/axiado/bmc_pb;protocol=ssh;branch=develop"
-
 S = "${WORKDIR}/git"
 
 inherit deploy
