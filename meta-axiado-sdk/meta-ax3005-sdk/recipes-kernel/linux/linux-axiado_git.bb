@@ -1,4 +1,4 @@
-SRCREV = "7c34d22b8f9ff650218e43a9ba81c1f425b36f27"
+SRCREV = "38f1c6feecff6ab6302def7811a3af715e397286"
 SRCBRANCH = "dev-6.6-axiado-ax3005"
 SRC_URI = "git://github.com/axiado/linux-axiado;protocol=https;branch=${SRCBRANCH}"
 

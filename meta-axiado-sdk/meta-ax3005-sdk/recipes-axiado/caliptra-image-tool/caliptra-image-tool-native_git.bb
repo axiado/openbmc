@@ -3,7 +3,7 @@ DESCRIPTION = "Axiado flash tool for Caliptra image generation"
 
 LICENSE = "CLOSED"
 
-SRCREV = "b3a84a5d9ebe2520a8bd4aae7b1258f924c635a3"
+SRCREV = "6f73c403c30540b08b048cf716224bfae844ddc2"
 SRC_URI = "gitsm://git@github.com/axiado/caliptra_img_gen;protocol=ssh;branch=develop"
 
 S = "${WORKDIR}/git"

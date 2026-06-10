@@ -29,10 +29,6 @@
 
   This layer contains the basic builds for Axiado TCU.
 
-* meta-amd/meta-intel/meta-nvidia
-
-  These layers contain the reference builds for AMD/Intel/Nvidia platforms based on Axiado TCU.
-
 ## Others
 
 * recipes-axiado

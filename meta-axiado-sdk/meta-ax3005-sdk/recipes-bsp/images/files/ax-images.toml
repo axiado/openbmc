@@ -3,53 +3,53 @@ id = 0
 path = "images/sbl.bin"
 svn = 1
 source = 0
-ignore_auth_check = false
+ignore_auth_check = true
 
 [[ax_images]]
 id = 1
 path = "images/secmc.img.ebin"
 svn = 1
 source = 0
-ignore_auth_check = false
+ignore_auth_check = true
 
 [[ax_images]]
 id = 2
 path = "images/sysmgr.bin"
 svn = 1
 source = 1
-ignore_auth_check = false
+ignore_auth_check = true
 
 [[ax_images]]
 id = 3
 path = "images/sbl.bin"
 svn = 1
 source = 1
-ignore_auth_check = false
+ignore_auth_check = true
 
 [[ax_images]]
 id = 4
 path = "images/sbl.bin"
 svn = 1
 source = 1
-ignore_auth_check = false
+ignore_auth_check = true
 
 [[ax_images]]
 id = 5
 path = "images/u-boot.bin"
 svn = 1
 source = 1
-ignore_auth_check = false
+ignore_auth_check = true
 
 [[ax_images]]
 id = 6
 path = "images/fitImage"
 svn = 1
 source = 1
-ignore_auth_check = false
+ignore_auth_check = true
 
 [[ax_images]]
 id = 7
 path = "images/rootfs.bin"
 svn = 1
 source = 1
-ignore_auth_check = false
+ignore_auth_check = true

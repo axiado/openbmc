@@ -1,6 +1,6 @@
 require recipes-bsp/images/bmc-pb.inc
 
-SRCREV = "84a31e920cc0b2ba69ec296fe7dd120755377545"
+SRCREV = "669b562be175530ae17102b43742ec314db71ae6"
 SRC_URI = "git://git@github.com/axiado/bmc_pb;protocol=ssh;branch=develop"
 SRC_URI += "file://ax-images.toml"
 

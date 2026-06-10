@@ -21,8 +21,8 @@ do_configure() {
     if [ "${USE_CALIPTRA_DUMMY_KEYS}" = "1" ]; then
         bbwarn "Using dummy keys to generate flash image"
 
-        cp ${RECIPE_SYSROOT}${datadir}/axiado/images/caliptra-12052026_162727.bin ${S}/images/
-        cp ${RECIPE_SYSROOT}${datadir}/axiado/images/caliptra-auth-12052026_162727.bin ${S}/images/
+        cp ${RECIPE_SYSROOT}${datadir}/axiado/images/caliptra-02062026_170655.bin ${S}/images/
+        cp ${RECIPE_SYSROOT}${datadir}/axiado/images/caliptra-auth-02062026_170655.bin ${S}/images/
     fi
 
     cp ${RECIPE_SYSROOT}${datadir}/axiado/images/image-bundle.bin ${S}/images/
