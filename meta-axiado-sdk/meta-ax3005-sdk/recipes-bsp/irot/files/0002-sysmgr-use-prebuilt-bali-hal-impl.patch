@@ -1,4 +1,4 @@
-From 9c8485d0a46aeb88eaa366ab9232b50c709e3686 Mon Sep 17 00:00:00 2001
+From 9c8ababcf3032367996ac81af05c66e20df6494f Mon Sep 17 00:00:00 2001
 From: Kuan-Jui Chiu <kchiu@axiado.com>
 Date: Mon, 18 May 2026 00:00:00 +0000
 Subject: [PATCH] sysmgr: link against prebuilt HAL from sysroot
@@ -6,11 +6,11 @@ Subject: [PATCH] sysmgr: link against prebuilt HAL from sysroot
 Upstream-Status: Inappropriate [Yocto packaging adaptation]
 Signed-off-by: Kuan-Jui Chiu <kchiu@axiado.com>
 ---
- sysmgr/CMakeLists.txt | 15 +++++++++++++--
- 1 file changed, 13 insertions(+), 2 deletions(-)
+ sysmgr/CMakeLists.txt | 13 ++++++++++++-
+ 1 file changed, 12 insertions(+), 1 deletion(-)
 
 diff --git a/sysmgr/CMakeLists.txt b/sysmgr/CMakeLists.txt
-index 29b20ec..7b0d8be 100644
+index 20b62cb..7d8d6cd 100644
 --- a/sysmgr/CMakeLists.txt
 +++ b/sysmgr/CMakeLists.txt
 @@ -57,7 +57,18 @@ add_compile_definitions(
@@ -33,12 +33,6 @@ index 29b20ec..7b0d8be 100644
  
  # Disable shadow warning only for ARM_CRx_MPU port.c
  set_source_files_properties(
-@@ -134,4 +145,4 @@ add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-     COMMAND ${SIZE} $<TARGET_FILE:${PROJECT_NAME}>
-     COMMAND ${CMAKE_OBJCOPY} -O binary $<TARGET_FILE:${PROJECT_NAME}> ${PROJECT_NAME}.bin
-     COMMENT "Size info and binary generation"
--)
-\ No newline at end of file
-+)
 -- 
 2.34.1
+

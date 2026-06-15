@@ -1,0 +1,26 @@
+From d82ad8d968e509ce9314586fb4f142ce3a935082 Mon Sep 17 00:00:00 2001
+From: Kuan-Jui Chiu <kchiu@axiado.com>
+Date: Mon, 15 Jun 2026 01:57:24 -0700
+Subject: [PATCH] sysmgr: Add missing ax-hal header
+
+Upstream-Status: Inappropriate [Missing header fix]
+Signed-off-by: Kuan-Jui Chiu <kchiu@axiado.com>
+---
+ sysmgr/src/openbic/pldm/pldm_firmware_update.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/sysmgr/src/openbic/pldm/pldm_firmware_update.c b/sysmgr/src/openbic/pldm/pldm_firmware_update.c
+index 8efc35d..abd1ef6 100644
+--- a/sysmgr/src/openbic/pldm/pldm_firmware_update.c
++++ b/sysmgr/src/openbic/pldm/pldm_firmware_update.c
+@@ -48,6 +48,7 @@
+ #include "flash/ax_sysmgr_storage.h"
+ #include "boot_agent/boot_agent.h"
+ #include "flash_map_ultra.h" /* SYSMGR_IMAGE_ID, SYSMGR_IMG_MAX_SIZE */
++#include "ax_hal_inc.h"
+ 
+ /* ---------- Phase 2a: FD-initiated download driver ---------- */
+ 
+-- 
+2.34.1
+

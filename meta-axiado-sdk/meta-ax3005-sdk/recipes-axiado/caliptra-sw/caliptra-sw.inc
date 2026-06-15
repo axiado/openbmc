@@ -55,12 +55,7 @@ do_install() {
     install -m 0644 ${B}/image-bundle.bin ${D}${nonarch_base_libdir}/firmware/caliptra/image-bundle.bin
 }
 
-# Ensure to remove the pre-built one
-do_deploy[depends] += "bmc-pb:do_deploy"
 do_deploy() {
-    if [ -e "${DEPLOY_DIR_IMAGE}"/image-bundle.bin ]; then
-        rm ${DEPLOY_DIR_IMAGE}/image-bundle.bin
-    fi
     install -m 0644 ${B}/image-bundle.bin ${DEPLOYDIR}
 }
 

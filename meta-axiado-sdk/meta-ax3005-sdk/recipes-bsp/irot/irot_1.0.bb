@@ -20,6 +20,7 @@ SRC_URI = "${SRC_URI_KW_HAL};branch=${SRCBRANCH};name=kw-hal \
            file://0001-freertos_r52_kernel_support.patch;patchdir=${S}/bali_hal/library/FreeRTOS-Kernel \
            file://0002-sysmgr-use-prebuilt-bali-hal-impl.patch;patchdir=${S} \
            file://0003-ax_hal-Add-sysroot-into-the-list-of-headers-path.patch;patchdir=${S}/ax_hal \
+           file://0004-sysmgr-Add-missing-ax-hal-header.patch;patchdir=${S} \
            "
 
 SRCREV_kw-hal = "726cf5202a7bbb14fde862dc23bc84047b57e68d"
@@ -52,12 +53,7 @@ do_install() {
     install -m 0644 ${B}/sysmgr.bin ${D}${datadir}/ax3005
 }
 
-# Ensure to remove the pre-built one
-do_deploy[depends] += "bmc-pb:do_deploy"
 do_deploy() {
-    if [ -e "${DEPLOY_DIR_IMAGE}"/sysmgr.bin ]; then
-        rm ${DEPLOY_DIR_IMAGE}/sysmgr.bin
-    fi
     install -m 0644 ${B}/sysmgr.bin ${DEPLOYDIR}
 }
 

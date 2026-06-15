@@ -15,8 +15,8 @@ do_install:append() {
 }
 
 do_deploy:append() {
-    install -m 0644 ${S}/ax3005/images/image-bundle.bin ${DEPLOYDIR}
+# image-bundle.bin is deployed by caliptra-sw recipe
     install -m 0644 ${S}/ax3005/images/sbl.bin ${DEPLOYDIR}
     install -m 0644 ${S}/ax3005/images/secmc.img.ebin ${DEPLOYDIR}
-    install -m 0644 ${S}/ax3005/images/sysmgr.bin ${DEPLOYDIR}
+# sysmgr.bin is deployed by irot recipe
 }

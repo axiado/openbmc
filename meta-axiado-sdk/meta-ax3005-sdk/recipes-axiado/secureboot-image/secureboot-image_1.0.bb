@@ -1,6 +1,12 @@
 require secureboot-image.inc
 
-do_configure[depends] += "caliptra-sw:do_populate_sysroot"
+DEPENDS += "caliptra-sw irot optee-os trusted-firmware-a"
+
+do_configure[depends] += "caliptra-sw:do_populate_sysroot \
+                          irot:do_populate_sysroot \
+                          optee-os:do_populate_sysroot \
+                          trusted-firmware-a:do_populate_sysroot \
+                          "
 do_configure:append() {
     cp ${RECIPE_SYSROOT}${nonarch_base_libdir}/firmware/caliptra/image-bundle.bin ${S}/images/
 }
