@@ -6,7 +6,7 @@ PV = "1.0+dev"
 
 SRCBRANCH = "release/release-u-0.1.0"
 SRC_URI += "git://bitbucket.org/ax-engg/ax-bsp-headers.git;protocol=https;branch=${SRCBRANCH}"
-SRCREV = "7348dfbb8c8620bc00a65e47c76f90b7e615d6f3"
+SRCREV = "ee4b990b9616dfd0578c6536a73240374bc6f62f"
 
 do_configure[noexec] = "1"
 do_compile[noexec] = "1"

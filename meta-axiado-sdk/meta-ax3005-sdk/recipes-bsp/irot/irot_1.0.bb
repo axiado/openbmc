@@ -20,12 +20,12 @@ SRC_URI = "${SRC_URI_KW_HAL};branch=${SRCBRANCH};name=kw-hal \
            file://0001-freertos_r52_kernel_support.patch;patchdir=${S}/bali_hal/library/FreeRTOS-Kernel \
            file://0002-sysmgr-use-prebuilt-bali-hal-impl.patch;patchdir=${S} \
            file://0003-ax_hal-Add-sysroot-into-the-list-of-headers-path.patch;patchdir=${S}/ax_hal \
-           file://0004-sysmgr-Add-missing-ax-hal-header.patch;patchdir=${S} \
+           file://0004-sysmgr-Fix-potential-null-dereference.patch;patchdir=${S} \
            "
 
-SRCREV_kw-hal = "726cf5202a7bbb14fde862dc23bc84047b57e68d"
-SRCREV_ax-hal = "4a5bdca9969d3a6a08e7fb7ccf4c48e35cf45bac"
-SRCREV_bali-hal = "923405fc370908c87083aca401167248bc7c6e12"
+SRCREV_kw-hal = "fd71f93ed24eec729f7b0958026bd4a92d7cb477"
+SRCREV_ax-hal = "a10eef05c85402ff1db88d1bf37bcdbe691b332a"
+SRCREV_bali-hal = "4fd07a047168576ad6ba97c6e075e09b9e9d5693"
 SRCREV_caliptra-sw = "320f75fca34c59de60a022908090f6a277caa63c"
 
 DEPENDS = "cmake-native gcc-arm-none-eabi-native kw-hal ax-bsp-headers"
