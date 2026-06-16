@@ -8,14 +8,12 @@ LIC_FILES_CHKSUM ?= "file://${COREBASE}/meta-axiado-sdk/COPYING.axiado;md5=3da9c
 
 inherit native
 
-DEPENDS += "u-boot virtual/kernel python3-build-native"
+DEPENDS += "u-boot virtual/kernel linux-yocto-fitimage python3-build-native"
 
-do_configure[depends] += "virtual/bootloader:do_deploy virtual/kernel:do_deploy"
+do_configure[depends] += "virtual/bootloader:do_deploy virtual/kernel:do_deploy linux-yocto-fitimage:do_deploy"
 do_configure[nostamp] = "1"
-do_compile[depends] += "virtual/bootloader:do_deploy virtual/kernel:do_deploy"
+do_compile[depends] += "virtual/bootloader:do_deploy virtual/kernel:do_deploy linux-yocto-fitimage:do_deploy"
 do_compile[nostamp] = "1"
-
-S = "${WORKDIR}/git"
 
 PROVISION_UBOOT ?= "FLASH_UBOOT.bin"
 PROVISION_KERNEL_FILE ?= "fitImage"
@@ -44,8 +42,7 @@ do_configure() {
     install -m 0644 ${UNPACKDIR}/sign.txt ${B}/ws/images/
     install -m 0644 ${DEPLOY_DIR_IMAGE}/u-boot.bin ${B}/ws/images/updates/uboot.bin
 
-    filename=$(readlink ${DEPLOY_DIR_IMAGE}/${PROVISION_KERNEL_FILE})
-    if [ "${filename##*.}" != "${PROVISION_SUFFIX}" ]; then
+    if [ ! -L "${DEPLOY_DIR_IMAGE}/${PROVISION_KERNEL_FILE}" ]; then
         install -m 0644 ${DEPLOY_DIR_IMAGE}/${PROVISION_KERNEL_FILE} ${B}/ws/images/fitImage
     fi
 }
@@ -56,8 +53,7 @@ do_compile() {
 
     python3 -m tools.tooling ${PROVISION_SCU} ${PROVISION_SCU_ARGS}
 
-    filename=$(readlink ${DEPLOY_DIR_IMAGE}/${PROVISION_KERNEL_FILE})
-    if [ "${filename##*.}" != "${PROVISION_SUFFIX}" ]; then
+    if [ ! -L "${DEPLOY_DIR_IMAGE}/${PROVISION_KERNEL_FILE}" ]; then
         python3 -m tools.tooling ${PROVISION_SIGNER} ${PROVISION_SIGNER_ARGS}
     fi
 }
@@ -66,8 +62,7 @@ do_deploy() {
     install -d ${DEPLOY_DIR_IMAGE}/axiado
     install -m 0644 ${B}/ws/artifacts/${PROVISION_UBOOT} ${DEPLOY_DIR_IMAGE}/axiado/
 
-    filename=$(readlink ${DEPLOY_DIR_IMAGE}/${PROVISION_KERNEL_FILE})
-    if [ "${filename##*.}" != "${PROVISION_SUFFIX}" ]; then
+    if [ ! -L "${DEPLOY_DIR_IMAGE}/${PROVISION_KERNEL_FILE}" ]; then
         install -m 0644 ${B}/ws/images/fitImage.${PROVISION_SUFFIX} ${DEPLOY_DIR_IMAGE}/axiado/${PROVISION_KERNEL}
         ln -sf ${DEPLOY_DIR_IMAGE}/axiado/${PROVISION_KERNEL} ${DEPLOY_DIR_IMAGE}/${PROVISION_KERNEL_FILE}
     fi

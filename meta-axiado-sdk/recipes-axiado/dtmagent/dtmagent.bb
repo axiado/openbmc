@@ -13,9 +13,6 @@ SRCBRANCH ?= "release/release-0.18.0"
 SRCREV ?= "b3601342e92a31789cb2036bf69773de79c6c11c"
 SRC_URI =  "git://bitbucket.org/ax-engg/dtm-agent.git;protocol=https;branch=${SRCBRANCH}"
 
-S = "${WORKDIR}/git"
-B = "${WORKDIR}/build"
-
 inherit meson pkgconfig
 inherit obmc-phosphor-systemd
 

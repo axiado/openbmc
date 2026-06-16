@@ -6,6 +6,4 @@ LICENSE = "CLOSED"
 
 LIC_FILES_CHKSUM ?= "file://COPYING.axiado;md5=01d0d9bdb04606d39dcbff1ca352f133"
 
-S = "${WORKDIR}/git"
-
 inherit cmake pkgconfig

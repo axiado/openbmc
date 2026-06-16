@@ -9,12 +9,9 @@ LICENSE = "CLOSED"
 
 SRCREV_FORMAT = "kw-hal_ax-hal_bali-hal"
 SRC_URI = "${SRC_URI_KW_HAL};branch=${SRCBRANCH};name=kw-hal \
-           ${SRC_URI_AX_HAL};branch=${SRCBRANCH};name=ax-hal;destsuffix=git/ax_hal \
-           ${SRC_URI_BAIL_HAL};branch=${SRCBRANCH};name=bali-hal;destsuffix=git/bali_hal \
+           ${SRC_URI_AX_HAL};branch=${SRCBRANCH};name=ax-hal;destsuffix=${P}/ax_hal \
+           ${SRC_URI_BAIL_HAL};branch=${SRCBRANCH};name=bali-hal;destsuffix=${P}/bali_hal \
            "
-
-S = "${WORKDIR}/git"
-B = "${WORKDIR}/build"
 
 # gcc-arm-none-eabi-native supplies arm-none-eabi-gcc from the Yocto-managed
 # meta-arm-toolchain layer (no system compiler dependency).

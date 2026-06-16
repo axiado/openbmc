@@ -10,14 +10,16 @@ PROVIDES += "virtual/kernel"
 
 KCONFIG_MODE = "--alldefconfig"
 
-inherit kernel
+inherit kernel kernel-fit-extra-artifacts
 require recipes-kernel/linux/linux-yocto.inc
-
-S = "${WORKDIR}/git"
-B = "${WORKDIR}/build"
 
 ERROR_QA:remove = "buildpaths"
 WARN_QA:append = "buildpaths"
 
+# OpenBMC supports zImage only for A32 machines by default
+KERNEL_IMAGETYPES += "vmlinux"
+
 # Linux don't support zImage for ARM64 platform
 KERNEL_IMAGETYPE:remove = "zImage"
+KERNEL_IMAGETYPES:remove = "zImage"
+

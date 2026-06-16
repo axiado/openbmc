@@ -13,9 +13,6 @@ SRCBRANCH ?= "release/release-0.18.0"
 SRCREV ?= "890a2cbd3b64760040321e3df87347690dcf07be"
 SRC_URI = "git://bitbucket.org/ax-engg/flowmeter.git;protocol=https;branch=${SRCBRANCH}"
 
-S = "${WORKDIR}/git"
-B = "${WORKDIR}/build"
-
 inherit meson pkgconfig
 inherit obmc-phosphor-systemd
 

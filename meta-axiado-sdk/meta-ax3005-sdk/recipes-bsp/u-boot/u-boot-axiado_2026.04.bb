@@ -6,6 +6,8 @@ SRC_URI = "git://bitbucket.org/ax-engg/u-boot_ultra.git;protocol=https;branch=${
 
 DEPENDS += "ax-bsp-headers"
 
+UBOOT_ENV_SRC = "build/u-boot-initial-env"
+
 do_configure:prepend() {
     cp ${RECIPE_SYSROOT}/${includedir}/ax-bsp-headers/soc_memory_map_b0.h ${S}/include/configs/
 }

@@ -2,8 +2,6 @@ SUMMARY = "Axiado Pre-built binaries for Axiado SoC family"
 
 LICENSE = "CLOSED"
 
-S = "${WORKDIR}/git"
-
 inherit deploy
 
 do_compile[noexec] = "1"

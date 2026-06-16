@@ -6,8 +6,6 @@ LICENSE = "CLOSED"
 SRCREV = "6f73c403c30540b08b048cf716224bfae844ddc2"
 SRC_URI = "gitsm://git@github.com/axiado/caliptra_img_gen;protocol=ssh;branch=develop"
 
-S = "${WORKDIR}/git"
-
 inherit cargo native
 
 export RUSTFLAGS += " -C linker=${BUILD_CC}"

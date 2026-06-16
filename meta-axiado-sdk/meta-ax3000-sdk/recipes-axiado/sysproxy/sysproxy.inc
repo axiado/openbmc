@@ -10,8 +10,6 @@ REL_BUILD_ID = "${@int(os.getenv('REL_BUILD_ID', '0'))}"
 
 inherit obmc-phosphor-systemd cmake pkgconfig
 
-S = "${WORKDIR}/git"
-
 ERROR_QA:remove = "buildpaths"
 WARNNING_QA:append = "buildpaths"
 

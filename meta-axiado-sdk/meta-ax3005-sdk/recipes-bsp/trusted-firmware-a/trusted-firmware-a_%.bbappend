@@ -4,8 +4,8 @@ SRCREV_tfa = "17979655c872ef4de437f6511f6fcce866f9555e"
 SRCBRANCH = "release/release-u-0.1.0"
 SRC_URI_TRUSTED_FIRMWARE_A = "git://bitbucket.org/ax-engg/trusted-firmware-a.git;protocol=https"
 
-# Remove patch for upstream repo v2.12 because our repo v2.14 has this fix already
-SRC_URI:remove = "file://0001-qemu_measured_boot.c-ignore-TPM-error-and-continue-w.patch"
+# Remove patch for upstream repo lts-v2.14.1 because our repo based on v2.13-rc0
+SRC_URI:remove = "file://0001-feat-build-add-HOSTLDFLAGS-to-pass-flags-to-host-lin.patch"
 
 DEPENDS += "ax-bsp-headers"
 

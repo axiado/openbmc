@@ -5,14 +5,13 @@ LICENSE = "CLOSED"
 
 inherit deploy
 
-DEPENDS += "u-boot virtual/kernel bmc-pb caliptra-image-tool-native"
+DEPENDS += "u-boot virtual/kernel linux-yocto-fitimage bmc-pb caliptra-image-tool-native"
 DEPENDS += '${@oe.utils.conditional("USE_CALIPTRA_DUMMY_KEYS", "1", "crypto-tool-native", "", d)}'
-
-S = "${WORKDIR}/git"
 
 do_configure[dirs] = "${S}/images"
 do_configure[depends] += "bmc-pb:do_populate_sysroot \
                           virtual/kernel:do_deploy \
+                          linux-yocto-fitimage:do_deploy \
                           u-boot:do_deploy \
                           obmc-phosphor-image:do_image_complete \
                           "

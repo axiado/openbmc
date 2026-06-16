@@ -8,10 +8,9 @@ LIC_FILES_CHKSUM = "file://Licenses/README;beginline=1;endline=135;md5=99d82354a
 require recipes-bsp/u-boot/u-boot.inc
 PROVIDES += "u-boot"
 
-S = "${WORKDIR}/git"
-B = "${WORKDIR}/build"
+B = "${UNPACKDIR}/build"
 
-DEPENDS += " dtc-native bison-native"
+DEPENDS += "dtc-native bison-native"
 
 UBOOT_ENV_SIZE ?= "0x10000"
 UBOOT_ENV = "u-boot-env"

@@ -6,8 +6,6 @@ LICENSE = "CLOSED"
 SRCREV = "42b66432febd0dd642793f742ba70d47350c9072"
 SRC_URI = "git://git@github.com/axiado/crypto;protocol=ssh;branch=develop"
 
-S = "${WORKDIR}/git"
-
 inherit cargo native
 
 # Using cargo to download packages
