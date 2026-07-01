@@ -3,10 +3,14 @@ DESCRIPTION = "Recipe to generate flash image for ax3005 SoC"
 
 LICENSE = "CLOSED"
 
-inherit deploy
+inherit deploy image_version
 
-DEPENDS += "u-boot virtual/kernel linux-yocto-fitimage bmc-pb caliptra-image-tool-native"
+DEPENDS += "u-boot virtual/kernel linux-yocto-fitimage bmc-pb caliptra-image-tool-native python3-build-native pldm"
 DEPENDS += '${@oe.utils.conditional("USE_CALIPTRA_DUMMY_KEYS", "1", "crypto-tool-native", "", d)}'
+
+SRC_URI = "file://flash.json"
+
+S = "${UNPACKDIR}"
 
 do_configure[dirs] = "${S}/images"
 do_configure[depends] += "bmc-pb:do_populate_sysroot \
@@ -62,12 +66,41 @@ do_compile() {
     AxImgGen ax-flash-image -c ax-flash.toml -w ${S}
 }
 
+do_generate_fwpkg[depends] += "pldm:do_populate_sysroot"
+python do_generate_fwpkg() {
+    import json
+    import subprocess
+
+    version_id = do_get_version(d)
+
+    flash_json = d.expand("${UNPACKDIR}/flash.json")
+
+    with open(flash_json, "r") as f:
+        data = json.load(f)
+
+    data["ComponentImageInformationArea"][0]["ComponentVersionString"] = version_id
+
+    with open(flash_json, "w") as f:
+        json.dump(data, f, indent=4)
+
+    cmd = [
+        "python3",
+        d.expand("${RECIPE_SYSROOT}${datadir}/pldm/pldm_fwup_pkg_creator.py"),
+        d.expand("${B}/flash.fwpkg"),
+        d.expand("${UNPACKDIR}/flash.json"),
+        d.expand("${S}/artifacts/flash.bin"),
+    ]
+    subprocess.check_call(cmd)
+}
+
 do_deploy() {
     install -m 0644 ${S}/artifacts/flash.bin ${DEPLOYDIR}/axiado-flash-${MACHINE}.bin
+    install -m 0644 ${B}/flash.fwpkg ${DEPLOYDIR}/axiado-flash-${MACHINE}.fwpkg
 }
 
 addtask do_prepare_keys after do_configure
 addtask do_generate_digest after do_prepare_keys
 addtask do_generate_signatures after do_generate_digest
 addtask do_compile after do_generate_signatures
-addtask do_deploy after do_compile before do_build
+addtask do_generate_fwpkg after do_compile
+addtask do_deploy after do_generate_fwpkg before do_build
