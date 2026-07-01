@@ -1,6 +1,6 @@
 require recipes-bsp/images/bmc-pb.inc
 
-SRCREV = "806d144a35447720638658f763dc8fabcc3f22e6"
+SRCREV = "6cbce897a823824f434bfea6415648ee1b4536d2"
 SRC_URI = "git://bitbucket.org/ax-engg/ax-bsp-prebuild.git;protocol=https;branch=develop"
 SRC_URI += "file://ax-images.toml"
 
