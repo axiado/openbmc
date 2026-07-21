@@ -1,13 +1,20 @@
-From: Axiado Corporation <engineering@axiado.com>
-Date: 2025-01-01 00:00:00
+From 56043b64ce6e021b88ce550568f05ad6b9cffe5a Mon Sep 17 00:00:00 2001
+From: Kuan-Jui Chiu <kchiu@axiado.com>
+Date: Thu, 16 Jul 2026 22:16:39 -0700
 Subject: [PATCH] Add Cortex-R52 kernel support for FreeRTOS ARM_CRx_MPU port
 
 Add support for 24 MPU regions (configTOTAL_MPU_REGIONS=24) and
 Cortex-R52 specific context save/restore for the ARM_CRx_MPU port.
 
 Upstream-Status: Inappropriate [Axiado platform-specific Cortex-R52 adaptation]
-Signed-off-by: Axiado Corporation <engineering@axiado.com>
+Signed-off-by: Kuan-Jui Chiu <kchiu@axiado.com>
 ---
+ portable/GCC/ARM_CRx_MPU/port.c          | 238 +++++++------------
+ portable/GCC/ARM_CRx_MPU/portASM.S       | 278 ++++++++++++-----------
+ portable/GCC/ARM_CRx_MPU/portmacro.h     |  11 +
+ portable/GCC/ARM_CRx_MPU/portmacro_asm.h |   2 +
+ 4 files changed, 236 insertions(+), 293 deletions(-)
+
 diff --git a/portable/GCC/ARM_CRx_MPU/port.c b/portable/GCC/ARM_CRx_MPU/port.c
 index 6b8d77cd6..794c9522b 100644
 --- a/portable/GCC/ARM_CRx_MPU/port.c
@@ -301,10 +308,10 @@ index 6b8d77cd6..794c9522b 100644
  }
  
 diff --git a/portable/GCC/ARM_CRx_MPU/portASM.S b/portable/GCC/ARM_CRx_MPU/portASM.S
-index 2b6f22ef2..e1d5feb8e 100644
+index 2b6f22ef2..a150f512a 100644
 --- a/portable/GCC/ARM_CRx_MPU/portASM.S
 +++ b/portable/GCC/ARM_CRx_MPU/portASM.S
-@@ -53,104 +53,84 @@
+@@ -53,104 +53,130 @@
  
  /* Save the context of a FreeRTOS Task. */
  .macro portSAVE_CONTEXT
@@ -348,10 +355,20 @@ index 2b6f22ef2..e1d5feb8e 100644
 -    POP     { R0 }          /* Pre-exception PC is in R0. */
 -    MRS     R1, SPSR        /* R1 = Pre-exception CPSR. */
 -    STM     LR!, { R0-R1 }  /* Store pre-exception PC and CPSR. */
+-
 +    dsb
 +    isb
 +
-+    push    {r0-r3, lr}
++    /*
++     * r4 is an AAPCS callee-saved register; the C compiler keeps task-local
++     * variables (e.g. pointer arguments) in it across function calls.  We must
++     * push r4 HERE, before we clobber it with frame_base, so that the correct
++     * task r4 ends up in the stmia^ block.  The original push {r0-r3,lr}
++     * omitted r4, so the saved frame always held frame_base instead of the
++     * task's r4 — corrupting any callee-saved variable the compiler placed
++     * there after every context switch.
++     */
++    push    {r0-r4, lr}
 +
 +    /* r4 := frame_base = pxCurrentTCB->pxTopOfStack */
 +    ldr     r0, =pxCurrentTCB
@@ -364,14 +381,14 @@ index 2b6f22ef2..e1d5feb8e 100644
 +    ldr     r1, [r1]
 +    str     r1, [lr], #4
 +
-+    /* Restore original r0-r3 (task values) */
-+    pop     {r0-r3}
- 
-+    /* [1..15] r0-r14 from SYS/USR bank */
++    /* Restore original r0-r4 (task values); lr remains the cursor */
++    pop     {r0-r4}
++
++    /* [1..15] r0-r14 from SYS/USR bank — r4 now holds the task's r4 */
 +    stmia   lr, {r0-r14}^
 +    add     lr, lr, #60         /* 15 regs * 4 */
 +
-+    /* Pop saved lr_svc (return PC) into r0 */
++    /* Pop saved lr (return PC) into r0 */
 +    pop     {r0}
 +
 +    /* [16] saved PC, [17] saved SPSR */
@@ -379,15 +396,46 @@ index 2b6f22ef2..e1d5feb8e 100644
 +    str     r0, [lr], #4
 +    str     r1, [lr], #4
 +
-+    /* Write back frame base */
++    /*
++     * Write back frame base.  r4 was restored to the task's r4 above, so we
++     * must NOT use it here.  Re-read pxTopOfStack from the TCB via r3 (already
++     * committed to the frame, safe to clobber).  For this fixed-frame port the
++     * store is idempotent (frame_base never changes), but it keeps the
++     * structure consistent with ports where pxTopOfStack advances.
++     */
 +    ldr     r2, =pxCurrentTCB
 +    ldr     r2, [r2]
-+    str     r4, [r2]
++    ldr     r3, [r2]            /* r3 = frame_base (re-read) */
++    str     r3, [r2]            /* write back */
  .endm
  
  /* ----------------------------------------------------------------------------------- */
  
  /* Restore the context of a FreeRTOS Task. */
++/*
++ * Frame layout (matching portSAVE_CONTEXT):
++ *   [frame_base +  0]  ulCriticalNesting
++ *   [frame_base +  4]  r0   \
++ *   [frame_base +  8]  r1    |
++ *   ...                       > 15 regs × 4 = 60 bytes
++ *   [frame_base + 60]  r14  /
++ *   [frame_base + 64]  saved PC
++ *   [frame_base + 68]  saved SPSR
++ *
++ * Register sharing issue fixed here:
++ *   r0-r12 are SHARED physical registers between the current exception mode
++ *   (SVC or IRQ) and USR/SYS mode.  The original code did ldmia^ first,
++ *   correctly loading task r0/r1 into those shared registers, then
++ *   immediately overwrote them with PC and SPSR via two ldr instructions.
++ *   After the exception return the task saw r0=PC and r1=SPSR instead of
++ *   its own values.
++ *
++ *   Fix: load PC and the sanitised SPSR into r1/r2 BEFORE ldmia^, push them
++ *   onto the mode-banked stack (SP_svc or SP_irq — not visible to the task),
++ *   restore all task registers with ldmia^, then use RFEIA to perform the
++ *   exception return consuming only the banked SP.  No task register is
++ *   written after ldmia^.
++ */
  .macro portRESTORE_CONTEXT
 -    /* Load the pointer to the current task's Task Control Block (TCB). */
 -    LDR     LR, =pxCurrentTCB   /* LR = &( pxCurrentTCB ). */
@@ -434,53 +482,56 @@ index 2b6f22ef2..e1d5feb8e 100644
 -     *   location to restore the context from.
 -     * - It will restore R0-R14 of User mode i.e. SP(R13) and LR(R14) of User
 -     *   mode will be restored.
--     */
--    LDM     LR, { R0-R14 }^
--    ADD     LR, LR, #60 /* R0-R14 - Total 155 register, each 4 byte wide. */
--
--    RFE     LR  /* Restore PC and CPSR from the context. */
--
-+    /* lr := frame_base = pxCurrentTCB->pxTopOfStack */
 +    ldr     r0, =pxCurrentTCB
 +    ldr     r0, [r0]
 +    ldr     lr, [r0]            /* lr = frame_base */
 +
-+    /* [0] ulCriticalNesting */
++    /* [0] ulCriticalNesting; lr advances to frame_base+4 */
 +    ldr     r1, [lr], #4
 +    ldr     r0, =ulCriticalNesting
 +    str     r1, [r0]
 +
-+    /* [1..15] restore r0-r14 into SYS/USR bank */
++    /* Pre-load PC and SPSR from frame before ldmia^ can clobber r1/r2 */
++    add     r0, lr, #60         /* r0 → frame[PC]  (frame_base + 4 + 60) */
++    ldr     r1, [r0], #4        /* r1  = saved PC  */
++    ldr     r2, [r0]            /* r2  = saved SPSR */
++
++    /*
++     * Port invariant: all FreeRTOS tasks run in ARM SYS mode (0x1F) with
++     * IRQ and FIQ unmasked.  Enforce unconditionally so a corrupt initial
++     * SPSR from pxPortInitialiseStack cannot put the CPU in an unexpected
++     * mode or leave interrupts permanently disabled.
+      */
+-    LDM     LR, { R0-R14 }^
+-    ADD     LR, LR, #60 /* R0-R14 - Total 155 register, each 4 byte wide. */
++    bic     r2, r2, #0x1F       /* clear mode bits          */
++    orr     r2, r2, #0x1F       /* SYS mode (0x1F)          */
++    bic     r2, r2, #0x20       /* T=0: force ARM state     */
++    bic     r2, r2, #(1 << 7)   /* I=0: IRQ enabled         */
++    bic     r2, r2, #(1 << 6)   /* F=0: FIQ enabled         */
++
++    /*
++     * Push {PC, CPSR} to the current mode's banked SP for RFEIA.
++     * STMDB stores the lowest-numbered register at the lowest address:
++     *   [SP-8] = r1 = PC    <- RFEIA reads from [SP]
++     *   [SP-4] = r2 = CPSR  <- RFEIA reads from [SP+4]
++     */
++    stmdb   sp, {r1, r2}
++    sub     sp, sp, #8
++
++    /* Restore all task registers; lr_current is unchanged (no writeback) */
 +    ldmia   lr, {r0-r14}^
-+    add     lr, lr, #60
-+
-+    /* [16] saved PC */
-+    ldr     r0, [lr], #4
-+
-+    /* [17] saved SPSR */
-+    ldr     r1, [lr], #4
-+
-+    /* -------------------------------------------------
-+     * Bring-up safety: sanitize SPSR for Cortex-R52
-+     * Force: SYS mode, ARM state, I/F enabled (or choose)
-+     * ------------------------------------------------- */
-+    bic     r1, r1, #0x1F       /* clear mode bits */
-+    orr     r1, r1, #0x1F       /* SYS mode */
-+    bic     r1, r1, #0x20       /* T=0 ARM state */
-+    bic     r1, r1, #(1<<7)     /* I=0 enable IRQ in task */
-+    bic     r1, r1, #(1<<6)     /* F=0 enable FIQ (optional) */
-+
-+    msr     spsr_cxsf, r1
-+
-+    /* Exception return to restored PC with restored CPSR */
-+    mov     lr, r0
+ 
+-    RFE     LR  /* Restore PC and CPSR from the context. */
 +    dsb
 +    isb
-+    movs    pc, lr
+ 
++    /* Exception return: CPSR=[SP+4], PC=[SP], SP+=8 */
++    rfeia   sp!
  .endm
  
  /* ----------------------------------------------------------------------------------- */
-@@ -175,51 +155,49 @@ vPortStartFirstTask:
+@@ -175,51 +201,49 @@ vPortStartFirstTask:
  .global FreeRTOS_SVC_Handler
  .type FreeRTOS_SVC_Handler, %function
  FreeRTOS_SVC_Handler:
@@ -547,7 +598,7 @@ index 2b6f22ef2..e1d5feb8e 100644
      LDR     R11, =pxCurrentTCB /* R11 = &( pxCurrentTCB ). */
      LDR     R11, [R11]         /* R11 = pxCurrentTCB. */
      ADD     R11, R11, #portSYSTEM_CALL_INFO_OFFSET /* R11 now points to xSystemCallStackInfo in TCB. */
-@@ -227,23 +205,18 @@ svcSystemCallExit:
+@@ -227,23 +251,18 @@ svcSystemCallExit:
      /* Restore the user mode SP and LR. */
      LDM   R11, { R13-R14 }^
  
@@ -579,7 +630,7 @@ index 2b6f22ef2..e1d5feb8e 100644
      LDR     R12, =uxSystemCallImplementations /* R12 = uxSystemCallImplementations. */
      /* R12 = uxSystemCallImplementations[ R12 + ( R11 << 2 ) ].
       * R12 now contains the address of the system call impl function. */
-@@ -271,12 +244,9 @@ svcSystemCallEnter:
+@@ -271,12 +290,9 @@ svcSystemCallEnter:
       * and xSystemCallStackInfo.pulSystemCallExitAddress. */
      LDM     R11, { R13-R14 }^
  
@@ -595,7 +646,7 @@ index 2b6f22ef2..e1d5feb8e 100644
  
  /* ----------------------------------------------------------------------------------- */
  
-@@ -287,7 +257,7 @@ svcSystemCallEnter:
+@@ -287,7 +303,7 @@ svcSystemCallEnter:
  .global vPortDisableInterrupts
  .type vPortDisableInterrupts, %function
  vPortDisableInterrupts:
@@ -604,7 +655,7 @@ index 2b6f22ef2..e1d5feb8e 100644
      BX      LR
  
  /* ----------------------------------------------------------------------------------- */
-@@ -299,7 +269,7 @@ vPortDisableInterrupts:
+@@ -299,7 +315,7 @@ vPortDisableInterrupts:
  .global vPortEnableInterrupts
  .type vPortEnableInterrupts, %function
  vPortEnableInterrupts:
@@ -613,7 +664,7 @@ index 2b6f22ef2..e1d5feb8e 100644
      BX      LR
  
  /* ----------------------------------------------------------------------------------- */
-@@ -321,10 +291,10 @@ vPortEnableInterrupts:
+@@ -321,10 +337,10 @@ vPortEnableInterrupts:
  .global vMPUSetRegion
  .type vMPUSetRegion, %function
  vMPUSetRegion:
@@ -627,7 +678,7 @@ index 2b6f22ef2..e1d5feb8e 100644
      MCR     p15, #0, R3, c6, c1, #4 /* MPU Region Access Control Register. */
      MCR     p15, #0, R2, c6, c1, #2 /* MPU Region Size and Enable Register. */
  
-@@ -437,7 +407,7 @@ FreeRTOS_IRQ_Handler:
+@@ -437,7 +453,7 @@ FreeRTOS_IRQ_Handler:
      POP     { R0-R3, LR }
  
      /* Disable IRQs incase vApplicationIRQHandler enabled them for re-entry. */
@@ -678,3 +729,6 @@ index c9573e419..4f7e95f5d 100644
  #else
      #error "Set configTOTAL_MPU_REGIONS to the number of MPU regions in FreeRTOSConfig.h"
  #endif /* configTOTAL_MPU_REGIONS */
+-- 
+2.34.1
+
