@@ -12,8 +12,7 @@ FLASH_ROFS_OFFSET = "17480"
 FLASH_RWFS_OFFSET = "65535"
 
 WKS_FILE ?= "emmc-ax3005-sdk.wks.in"
-# FIT images are built by the linux-yocto-fitimage recipe
-WKS_FILE_DEPENDS ?= "virtual/bootloader linux-yocto-fitimage"
+WKS_FILE_DEPENDS:append = " virtual/bootloader"
 IMAGE_FSTYPES += "wic.xz"
 
 IMAGE_CLASSES += "image_types_ax3005"
