@@ -3,12 +3,13 @@ require kw-hal.inc
 DEPENDS += "ax-bsp-headers"
 
 SRCREV_FORMAT:append = "_caliptra-sw"
-SRCREV_kw-hal = "944a8f94c33cc8fb6f33fb2e442251c3be8db528"
-SRCREV_ax-hal = "96521267b5fb362b8e25fb911511e0fedd5d116a"
-SRCREV_bali-hal = "7eaec22a13c434977e982d756408648b6827db41"
-SRCREV_caliptra-sw = "320f75fca34c59de60a022908090f6a277caa63c"
+# BU2-551
+SRCREV_kw-hal = "d2f92649dae2e7bb7aff3efac886c9e6e53324a1"
+SRCREV_ax-hal = "0944df4675c266c1da15f8e7164bfed3bb9538a0"
+SRCREV_bali-hal = "505d66659ec726911a41f9d6599a054a83f6c93f"
+SRCREV_caliptra-sw = "f6999a2ee7428f03afb926e5f328479be7b4ea1d"
 
-SRCBRANCH = "release/release-u-0.1.0"
+SRCBRANCH = "release/release-u-0.2.0"
 
 SRC_URI_KW_HAL = "git://bitbucket.org/ax-engg/kw-hal.git;protocol=https"
 SRC_URI_AX_HAL = "git://bitbucket.org/ax-engg/ax_hal.git;protocol=https"
