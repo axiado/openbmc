@@ -1,0 +1,28 @@
+From f1ad28b429f0d267c7a6ab2c559a6adccc4b1999 Mon Sep 17 00:00:00 2001
+From: Kuan-Jui Chiu <kchiu@axiado.com>
+Date: Tue, 21 Jul 2026 23:48:11 -0700
+Subject: [PATCH] Add new type MCTPMailboxTarget into pldmd
+
+Upstream-Status: Inappropriate [Axiado SoC adaptation]
+Signed-off-by: Kuan-Jui Chiu <kchiu@axiado.com>
+---
+ requester/mctp_endpoint_discovery.hpp | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/requester/mctp_endpoint_discovery.hpp b/requester/mctp_endpoint_discovery.hpp
+index b4545ff..992b635 100644
+--- a/requester/mctp_endpoint_discovery.hpp
++++ b/requester/mctp_endpoint_discovery.hpp
+@@ -30,7 +30,8 @@ constexpr const char* inventorySubtreePathStr =
+ 
+ const std::vector<std::string> interfaceFilter = {
+     "xyz.openbmc_project.Configuration.MCTPI2CTarget",
+-    "xyz.openbmc_project.Configuration.MCTPI3CTarget"};
++    "xyz.openbmc_project.Configuration.MCTPI3CTarget",
++    "xyz.openbmc_project.Configuration.MCTPMailboxTarget"};
+ 
+ /** @class MctpDiscoveryHandlerIntf
+  *
+-- 
+2.34.1
+
