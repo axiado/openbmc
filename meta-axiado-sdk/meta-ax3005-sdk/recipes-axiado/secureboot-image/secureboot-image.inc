@@ -6,7 +6,6 @@ LICENSE = "CLOSED"
 inherit deploy image_version
 
 DEPENDS += "u-boot virtual/kernel linux-yocto-fitimage bmc-pb caliptra-image-tool-native python3-build-native pldm"
-DEPENDS += '${@oe.utils.conditional("USE_CALIPTRA_DUMMY_KEYS", "1", "crypto-tool-native", "", d)}'
 
 SRC_URI = "file://flash.json"
 
@@ -24,8 +23,8 @@ do_configure() {
     if [ "${USE_CALIPTRA_DUMMY_KEYS}" = "1" ]; then
         bbwarn "Using dummy keys to generate flash image"
 
-        cp ${RECIPE_SYSROOT}${datadir}/axiado/images/caliptra-02062026_170655.bin ${S}/images/
-        cp ${RECIPE_SYSROOT}${datadir}/axiado/images/caliptra-auth-02062026_170655.bin ${S}/images/
+        cp ${RECIPE_SYSROOT}${datadir}/axiado/images/caliptra.bin ${S}/images/
+        cp ${RECIPE_SYSROOT}${datadir}/axiado/images/caliptra-auth.bin ${S}/images/
     fi
 
     cp ${RECIPE_SYSROOT}${datadir}/axiado/images/image-bundle.bin ${S}/images/
@@ -56,7 +55,6 @@ do_generate_digest() {
     AxImgGen ax-flash-image -c ax-flash.toml -s -w ${S}
 }
 
-do_generate_signatures[depends] += '${@oe.utils.conditional("USE_CALIPTRA_DUMMY_KEYS", "1", "crypto-tool-native:do_populate_sysroot", "", d)}'
 do_generate_signatures() {
     :
 }
