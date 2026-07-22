@@ -1,0 +1,13 @@
+{
+    "Exposes": [
+        {
+            "Bus": "0",
+            "EID": "0xa",
+            "Name": "IROT",
+            "Type": "MCTPMailboxTarget"
+        }
+    ],
+    "Name": "Ax3005",
+    "Probe": "TRUE",
+    "Type": "Board"
+}
