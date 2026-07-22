@@ -1,0 +1,286 @@
+From 2184a7a90728c77939e4d02b2838142402d27918 Mon Sep 17 00:00:00 2001
+From: Kuan-Jui Chiu <kchiu@axiado.com>
+Date: Tue, 21 Jul 2026 21:49:15 -0700
+Subject: [PATCH] Add new MCTPMailboxTarget type into MCTPReactor
+
+Upstream-Status: Inappropriate [Axiado SoC adaptation]
+Signed-off-by: Kuan-Jui Chiu <kchiu@axiado.com>
+---
+ src/mctp/MCTPEndpoint.cpp    | 156 ++++++++++++++++++++++++++++++++++-
+ src/mctp/MCTPEndpoint.hpp    |  23 ++++++
+ src/mctp/MCTPReactorMain.cpp |   9 +-
+ 3 files changed, 183 insertions(+), 5 deletions(-)
+
+diff --git a/src/mctp/MCTPEndpoint.cpp b/src/mctp/MCTPEndpoint.cpp
+index 986e3e0..342a94d 100644
+--- a/src/mctp/MCTPEndpoint.cpp
++++ b/src/mctp/MCTPEndpoint.cpp
+@@ -41,6 +41,10 @@ static constexpr const char* mctpdControlInterface =
+     "au.com.codeconstruct.MCTP.BusOwner1";
+ static constexpr const char* mctpdEndpointControlInterface =
+     "au.com.codeconstruct.MCTP.Endpoint1";
++static constexpr const char* mctpdNetworkInterface =
++    "au.com.codeconstruct.MCTP.Network1";
++static constexpr const char* mctpdNetworkPath =
++    "/au/com/codeconstruct/mctp1/networks/1";
+ 
+ MCTPDDevice::MCTPDDevice(
+     const std::shared_ptr<sdbusplus::asio::connection>& connection,
+@@ -95,14 +99,58 @@ void MCTPDDevice::setup(
+ {
+     // Use a lambda to separate state validation from business logic,
+     // where the business logic for a successful setup() is encoded in
+-    // MctpdDevice::finaliseEndpoint()
+-    auto onSetup = [weak{weak_from_this()}, added{std::move(added)}](
++    // MctpdDevice::finaliseEndpoint().
++    //
++    // The primary path asks the bus owner to AssignEndpoint(). If that call
++    // fails (e.g. the platform does not support dynamic assignment for this
++    // interface), fall back to LearnEndpoint() on the network, using the
++    // configured physical address as the EID hint.
++
++    // EID hint used by the LearnEndpoint() fallback
++    uint8_t eid = physaddr[0];
++
++    // LearnEndpoint() fallback, invoked when AssignEndpoint() fails
++    auto learnEndpoint = [weak{weak_from_this()}, connection{connection}, added,
++                          eid]() mutable {
++        auto onLearn = [weak, added, eid](
++                           const boost::system::error_code& ec,
++                           const std::string& objpath,
++                           bool allocated [[maybe_unused]]) mutable {
++            if (ec)
++            {
++                added(ec, {});
++                return;
++            }
++
++            if (auto self = weak.lock())
++            {
++                self->finaliseEndpoint(objpath, eid, 1, added);
++            }
++            else
++            {
++                info(
++                    "Device object for inventory at '{INVENTORY_PATH}' was destroyed concurrent to completion of its endpoint setup",
++                    "INVENTORY_PATH", objpath);
++            }
++        };
++
++        connection->async_method_call(std::move(onLearn), mctpdBusName,
++                                      mctpdNetworkPath, mctpdNetworkInterface,
++                                      "LearnEndpoint", eid);
++    };
++
++    // Primary path: ask the bus owner to assign an endpoint
++    auto onSetup = [weak{weak_from_this()}, added,
++                    learnEndpoint{std::move(learnEndpoint)}](
+                        const boost::system::error_code& ec, uint8_t eid,
+                        int network, const std::string& objpath,
+                        bool allocated [[maybe_unused]]) mutable {
+         if (ec)
+         {
+-            added(ec, {});
++            debug(
++                "AssignEndpoint failed ({ERROR_MESSAGE}); falling back to LearnEndpoint",
++                "ERROR_MESSAGE", ec.message());
++            learnEndpoint();
+             return;
+         }
+ 
+@@ -117,8 +165,9 @@ void MCTPDDevice::setup(
+                 "INVENTORY_PATH", objpath);
+         }
+     };
++
+     connection->async_method_call(
+-        onSetup, mctpdBusName,
++        std::move(onSetup), mctpdBusName,
+         mctpdControlPath + std::string("/interfaces/") + interface,
+         mctpdControlInterface, "AssignEndpoint", physaddr);
+ }
+@@ -399,6 +448,17 @@ std::optional<SensorBaseConfigMap> I3CMCTPDDevice::match(
+     return iface->second;
+ }
+ 
++std::optional<SensorBaseConfigMap> MailboxMCTPDDevice::match(
++    const SensorData& config)
++{
++    auto iface = config.find(configInterfaceName(configType));
++    if (iface == config.end())
++    {
++        return std::nullopt;
++    }
++    return iface->second;
++}
++
+ bool I2CMCTPDDevice::match(const std::set<std::string>& interfaces)
+ {
+     return interfaces.contains(configInterfaceName(configType));
+@@ -409,6 +469,11 @@ bool I3CMCTPDDevice::match(const std::set<std::string>& interfaces)
+     return interfaces.contains(configInterfaceName(configType));
+ }
+ 
++bool MailboxMCTPDDevice::match(const std::set<std::string>& interfaces)
++{
++    return interfaces.contains(configInterfaceName(configType));
++}
++
+ std::shared_ptr<I2CMCTPDDevice> I2CMCTPDDevice::from(
+     const std::shared_ptr<sdbusplus::asio::connection>& connection,
+     const SensorBaseConfigMap& iface)
+@@ -521,6 +586,63 @@ std::shared_ptr<I3CMCTPDDevice> I3CMCTPDDevice::from(
+     }
+ }
+ 
++std::shared_ptr<MailboxMCTPDDevice> MailboxMCTPDDevice::from(
++    const std::shared_ptr<sdbusplus::asio::connection>& connection,
++    const SensorBaseConfigMap& iface)
++{
++    auto mType = iface.find("Type");
++    if (mType == iface.end())
++    {
++        throw std::invalid_argument(
++            "No 'Type' member found for provided configuration object");
++    }
++
++    auto type = std::visit(VariantToStringVisitor(), mType->second);
++    if (type != configType)
++    {
++        throw std::invalid_argument("Not an Mailbox device");
++    }
++
++    auto mEid = iface.find("EID");
++    auto mBus = iface.find("Bus");
++    auto mName = iface.find("Name");
++    if (mEid == iface.end() || mBus == iface.end() || mName == iface.end())
++    {
++        throw std::invalid_argument(
++            "Configuration object violates MCTPMailboxTarget schema");
++    }
++
++    auto sEid = std::visit(VariantToStringVisitor(), mEid->second);
++    std::uint8_t eid{};
++    auto [aptr, aec] = std::from_chars(
++        sEid.data(), sEid.data() + sEid.size(), eid);
++    if (aec != std::errc{})
++    {
++        throw std::invalid_argument("Bad endpoint id");
++    }
++
++    auto sBus = std::visit(VariantToStringVisitor(), mBus->second);
++    int bus{};
++    auto [bptr,
++          bec] = std::from_chars(sBus.data(), sBus.data() + sBus.size(), bus);
++    if (bec != std::errc{})
++    {
++        throw std::invalid_argument("Bad bus index");
++    }
++
++    try
++    {
++        return std::make_shared<MailboxMCTPDDevice>(connection, bus, eid);
++    }
++    catch (const MCTPException& ex)
++    {
++        warning(
++            "Failed to create MailboxMCTPDDevice at [ bus: {BUS}, eid: {EID} ]: {EXCEPTION}",
++            "BUS", bus, "EID", eid, "EXCEPTION", ex);
++        return {};
++    }
++}
++
+ std::string I2CMCTPDDevice::interfaceFromBus(int bus)
+ {
+     std::filesystem::path netdir =
+@@ -562,3 +684,29 @@ std::string I3CMCTPDDevice::interfaceFromBus(int bus)
+           "I3C_BUS", bus, "NET_DEVICE", netdir);
+     throw MCTPException("No matching net device found for the specified bus");
+ }
++
++std::string MailboxMCTPDDevice::interfaceFromBus(int bus)
++{
++    std::filesystem::path netdir = std::format("/sys/class/net");
++    std::error_code ec;
++    std::filesystem::directory_iterator it(netdir, ec);
++    if (ec || it == std::filesystem::end(it))
++    {
++        error("No net device associated with mailbox{BUS} at {NET_DEVICE}",
++              "BUS", bus, "NET_DEVICE", netdir);
++        throw MCTPException("Mailbox is not configured as an MCTP interface");
++    }
++
++    std::string targetInterface = std::format("mctpmbox{}", bus);
++    for (const auto& entry : std::filesystem::directory_iterator(netdir))
++    {
++        if (entry.is_directory() && entry.path().filename() == targetInterface)
++        {
++            return targetInterface;
++        }
++    }
++
++    error("No matching net device found for mailbox{BUS} at {NET_DEVICE}",
++          "BUS", bus, "NET_DEVICE", netdir);
++    throw MCTPException("No matching net device found for the specified bus");
++}
+diff --git a/src/mctp/MCTPEndpoint.hpp b/src/mctp/MCTPEndpoint.hpp
+index deed905..12e1c09 100644
+--- a/src/mctp/MCTPEndpoint.hpp
++++ b/src/mctp/MCTPEndpoint.hpp
+@@ -355,3 +355,26 @@ class I3CMCTPDDevice : public MCTPDDevice
+ 
+     static std::string interfaceFromBus(int bus);
+ };
++
++class MailboxMCTPDDevice : public MCTPDDevice
++{
++  public:
++    static std::optional<SensorBaseConfigMap> match(const SensorData& config);
++    static bool match(const std::set<std::string>& interfaces);
++    static std::shared_ptr<MailboxMCTPDDevice> from(
++        const std::shared_ptr<sdbusplus::asio::connection>& connection,
++        const SensorBaseConfigMap& iface);
++
++    MailboxMCTPDDevice() = delete;
++    MailboxMCTPDDevice(
++        const std::shared_ptr<sdbusplus::asio::connection>& connection, int bus,
++        uint8_t eid) :
++        MCTPDDevice(connection, interfaceFromBus(bus), {eid})
++    {}
++    ~MailboxMCTPDDevice() override = default;
++
++  private:
++    static constexpr const char* configType = "MCTPMailboxTarget";
++
++    static std::string interfaceFromBus(int bus);
++};
+diff --git a/src/mctp/MCTPReactorMain.cpp b/src/mctp/MCTPReactorMain.cpp
+index 9d2d321..77b94d1 100644
+--- a/src/mctp/MCTPReactorMain.cpp
++++ b/src/mctp/MCTPReactorMain.cpp
+@@ -93,6 +93,13 @@ static std::shared_ptr<MCTPDevice> deviceFromConfig(
+             info("Creating I3CMCTPDDevice");
+             return I3CMCTPDDevice::from(connection, *iface);
+         }
++
++        iface = MailboxMCTPDDevice::match(config);
++        if (iface)
++        {
++            info("Creating MailboxMCTPDDevice");
++            return MailboxMCTPDDevice::from(connection, *iface);
++        }
+     }
+     catch (const std::invalid_argument& ex)
+     {
+@@ -247,7 +254,7 @@ int main()
+     boost::asio::post(io, [reactor, systemBus]() {
+         auto gsc = std::make_shared<GetSensorConfiguration>(
+             systemBus, std::bind_front(manageMCTPEntity, systemBus, reactor));
+-        std::vector<std::string_view> types{"MCTPI2CTarget", "MCTPI3CTarget"};
++        std::vector<std::string_view> types{"MCTPI2CTarget", "MCTPI3CTarget", "MCTPMailboxTarget"};
+         gsc->getConfiguration(types);
+     });
+ 
+-- 
+2.34.1
+
