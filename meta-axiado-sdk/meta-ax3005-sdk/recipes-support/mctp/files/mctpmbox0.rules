@@ -1,0 +1,2 @@
+# This rules file contains mctp devices related rules needed to work in hand with mctpd
+SUBSYSTEM=="net", ACTION=="add", KERNEL=="mctpmbox*", NAME="%E{INTERFACE}", RUN+="/bin/sh -c '/usr/bin/mctp link set $env{INTERFACE} up; /usr/bin/mctp link set $env{INTERFACE} network 1; /usr/bin/mctp addr add 11 dev $env{INTERFACE}; /usr/bin/mctp route add 10 via $env{INTERFACE} network 1'"
