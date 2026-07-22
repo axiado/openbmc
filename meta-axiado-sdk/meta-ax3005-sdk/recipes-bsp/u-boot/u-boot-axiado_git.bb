@@ -2,7 +2,7 @@ require recipes-bsp/u-boot/u-boot-axiado.inc
 
 SRCBRANCH = "master"
 SRC_URI = "git://github.com/axiado/u-boot-ax3005;protocol=https;branch=${SRCBRANCH}"
-SRCREV = "f0c0d84d7d93d23a808721b22482bef153ca2c9f"
+SRCREV = "1ba4cd2c115767b5ad7df0b35a8f9340bc7d6269"
 
 UBOOT_ENV_SRC = "build/u-boot-initial-env"
 

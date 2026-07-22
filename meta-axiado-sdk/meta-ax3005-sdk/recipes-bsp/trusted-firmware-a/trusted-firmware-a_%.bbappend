@@ -1,7 +1,7 @@
 LIC_FILES_CHKSUM = "file://docs/license.rst;md5=1118e32884721c0be33267bd7ae11130"
 
 SRCREV_tfa = "17979655c872ef4de437f6511f6fcce866f9555e"
-SRCBRANCH = "release/release-u-0.1.0"
+SRCBRANCH = "release/release-u-0.2.0"
 SRC_URI_TRUSTED_FIRMWARE_A = "git://bitbucket.org/ax-engg/trusted-firmware-a.git;protocol=https"
 
 # Remove patch for upstream repo lts-v2.14.1 because our repo based on v2.13-rc0
