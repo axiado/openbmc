@@ -2,7 +2,7 @@ require provision.inc
 
 PV = "1.0+git"
 
-SRCREV = "4fdfb389479b76631ebe6964c86a22aa15a6bd22"
+SRCREV = "6d36fe75f73cba8802f1a7edabfe40704df6211a"
 SRC_URI = "git://git@github.com/axiado/kirkwood-image-tool;protocol=ssh;branch=develop"
 SRC_URI += "file://sign.txt"
 # Make sure the mapping.txt is up-to-date
