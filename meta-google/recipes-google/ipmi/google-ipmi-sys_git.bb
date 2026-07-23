@@ -21,9 +21,8 @@ RDEPENDS:${PN} += " \
   bare-metal-active \
   "
 
-S = "${WORKDIR}/git"
 SRC_URI = "git://github.com/openbmc/google-ipmi-sys;branch=master;protocol=https"
-SRCREV = "f25863642da84ba8d73dca606475a1ebfe4f4ef7"
+SRCREV = "1a398cda0893ba15d4bb283c98e3f1f69c6b15cc"
 
 FILES:${PN} += "${libdir}/ipmid-providers"
 

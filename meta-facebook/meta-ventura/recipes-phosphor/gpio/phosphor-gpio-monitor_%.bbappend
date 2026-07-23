@@ -1,6 +1,7 @@
 FILESEXTRAPATHS:prepend := "${THISDIR}/${PN}:"
 
-inherit obmc-phosphor-systemd systemd
+inherit obmc-phosphor-utils
+inherit systemd
 
 SERVICE_LIST = "power-rail-assert-log@.service \
                 power-rail-deassert-log@.service \
@@ -31,10 +32,12 @@ FILES:${PN} += "${systemd_system_unitdir}/*"
 SYSTEMD_SERVICE:${PN} += "${SERVICE_LIST}"
 
 do_install:append() {
+    install -d ${D}${localstatedir}/lib/phosphor-gpio-monitor
     install -d ${D}${datadir}/phosphor-gpio-monitor
     install -m 0644 ${UNPACKDIR}/ventura-phosphor-multi-gpio-monitor.json \
                     ${D}${datadir}/phosphor-gpio-monitor/phosphor-multi-gpio-monitor.json
 
+    install -d ${D}${systemd_system_unitdir}
     for s in ${SERVICE_LIST}
     do
         install -m 0644 ${UNPACKDIR}/${s} ${D}${systemd_system_unitdir}/${s}

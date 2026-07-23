@@ -11,7 +11,7 @@ DEPENDS = " \
     phosphor-logging \
     sdbusplus \
     "
-SRCREV = "521c83d00bd9cb28ee90fd5412a7eaf7e8ae71e9"
+SRCREV = "fe47750e86e59e6829660c69eccf079ee1fd76f4"
 PACKAGECONFIG ??= " \
     adcsensor \
     exitairtempsensor \
@@ -95,8 +95,6 @@ SYSTEMD_SERVICE:${PN} += "${@bb.utils.contains('PACKAGECONFIG', 'psusensor', \
 SYSTEMD_SERVICE:${PN} += "${@bb.utils.contains('PACKAGECONFIG', 'smbpbi', \
                                                'xyz.openbmc_project.smbpbisensor.service', \
                                                '', d)}"
-
-S = "${WORKDIR}/git"
 
 inherit pkgconfig meson systemd
 

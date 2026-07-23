@@ -3,12 +3,13 @@ DESCRIPTION = "Modbus inventory, sensors and firmware update service"
 LICENSE = "Apache-2.0"
 LIC_FILES_CHKSUM = "file://LICENSE;md5=e3fc50a88d0a364313df4b21ef20c29e"
 DEPENDS = " \
+    ${PYTHON_PN}-jsonschema-native \
     phosphor-dbus-interfaces \
     phosphor-logging \
     sdbusplus \
     "
 
-SRCREV = "1f1d00458df8a375538de5f103c0566ae8a0159b"
+SRCREV = "fda14cad3e24e11a951a0f86682721f0a44d0fcc"
 
 PACKAGECONFIG ??= " \
     modbus-rtu \
@@ -22,8 +23,7 @@ SRC_URI = "git://github.com/openbmc/phosphor-modbus.git;branch=main;protocol=htt
 SYSTEMD_SERVICE:${PN} += "${@bb.utils.contains('PACKAGECONFIG', 'modbus-rtu', \
                                                'xyz.openbmc_project.ModbusRTU.service', \
                                                '', d)}"
-S = "${WORKDIR}/git"
 
-inherit pkgconfig meson systemd
+inherit pkgconfig meson systemd python3native
 
 EXTRA_OEMESON:append = " -Dtests=disabled"

@@ -8,13 +8,12 @@ DEPENDS += "phosphor-dbus-interfaces"
 DEPENDS += "sdeventplus"
 DEPENDS += "phosphor-logging"
 DEPENDS += "nlohmann-json"
-SRCREV = "0a0ba60874b2674cccb78f34f2aa6647237d031c"
+SRCREV = "5ef51383d77fc32f5d5d314e70f860126de623e7"
 PV = "0.1+git${SRCPV}"
 PR = "r1"
 
 SRC_URI = "git://github.com/openbmc/phosphor-nvme.git;protocol=https;branch=master"
 
-S = "${WORKDIR}/git"
 SYSTEMD_SERVICE:${PN} = "xyz.openbmc_project.nvme.manager.service"
 
 inherit meson pkgconfig

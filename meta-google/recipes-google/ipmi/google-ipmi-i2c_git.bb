@@ -10,9 +10,8 @@ inherit meson pkgconfig
 
 DEPENDS += "phosphor-ipmi-host"
 
-S = "${WORKDIR}/git"
 SRC_URI = "git://github.com/openbmc/google-ipmi-i2c;branch=master;protocol=https"
-SRCREV = "46dd62b3e72d83131bacf76ad6a2ce648510a98a"
+SRCREV = "41f1399d56fd2d7772e0b3b93f7bb4817587362d"
 
 FILES:${PN}:append = " ${libdir}/ipmid-providers"
 FILES:${PN}:append = " ${libdir}/host-ipmid"

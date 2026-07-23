@@ -11,13 +11,12 @@ DEPENDS += " \
   sdbusplus \
   phosphor-dbus-interfaces \
 "
-SRCREV = "bc942c6aa480a05f2c75207794154554e5a560d6"
+SRCREV = "64f4dd46f24f39a91834b66445845eecba43ee4a"
 PV = "0.1+git${SRCPV}"
 PR = "r1"
 
 SRC_URI = "git://github.com/openbmc/bios-bmc-smm-error-logger;branch=main;protocol=https"
 
-S = "${WORKDIR}/git"
 SYSTEMD_SERVICE:${PN} += "xyz.openbmc_project.bios_bmc_smm_error_logger.service"
 
 inherit meson pkgconfig systemd

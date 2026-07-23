@@ -23,7 +23,7 @@ gbmc_ncsi_dynamic_hook() {
   local -n numaddrs=gbmc_br_dhcrelay_linkaddrs["$intf"]
   # shellcheck disable=SC2154
   if [[ "$change" = 'link' && "$action" = 'add' ]]; then
-    ip link show "$intf" | grep -q '^ *alias ncsi-usb$' || return
+    ip link show "$intf" | grep -q '^ *alias ncsi-usb-side$' || return
     echo "NCSI USB Link Add $intf" >&2
 
 read -r -d '' contents <<EOF
@@ -64,7 +64,7 @@ EOF
       systemctl reset-failed nftables && \
       systemctl --no-block reload-or-restart nftables || true
     systemctl stop --no-block gbmc-ncsi-ra@"$intf" || true
-    systemctl stop --no-block gbmc-br-dhcrelay@"$intf" || true
+    rm -f /run/gbmc-br-dhcrelay/uppers/"$intf"
     unset numaddrs
   fi
 }

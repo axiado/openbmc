@@ -2,12 +2,10 @@ SUMMARY = "Chassis Power Control service for Intel based platforms"
 DESCRIPTION = "Chassis Power Control service for Intel based platforms"
 LICENSE = "Apache-2.0"
 LIC_FILES_CHKSUM = "file://LICENSE;md5=86d3f3a95c324c9479bd8986968f4327"
-SRCREV = "74eb00d3fac8a193288eaabf2b05fe7938139ab1"
+SRCREV = "6ecef57f475ae12f06ed7fb2f7147d5674894fb9"
 PV = "1.0+git${SRCPV}"
 
 SRC_URI = "git://github.com/openbmc/x86-power-control.git;protocol=https;branch=master"
-
-S = "${WORKDIR}/git"
 
 inherit meson systemd pkgconfig
 inherit obmc-phosphor-dbus-service

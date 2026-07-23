@@ -6,7 +6,7 @@ LIC_FILES_CHKSUM = "file://LICENSE;md5=0d30807bb7a4f16d36e96b78f9ed8fae"
 DEPENDS += "autoconf-archive-native \
             systemd \
            "
-SRCREV = "9626db9acc5a3eb5056ec8df95b035fed9f924db"
+SRCREV = "57d44bcd3717d2be2457814f03d4fc0f08bc0132"
 PACKAGECONFIG ??= "${@bb.utils.filter('DISTRO_FEATURES', 'systemd', d)} pcap"
 PACKAGECONFIG[systemd] = "--with-systemdsystemunitdir=${systemd_system_unitdir}, \
                           --without-systemdsystemunitdir,systemd"
@@ -20,7 +20,6 @@ SRC_URI = "git://github.com/openbmc/libmctp;branch=master;protocol=https \
 SYSTEMD_SERVICE:${PN} = "mctp-demux.service \
                          mctp-demux.socket \
                         "
-S = "${WORKDIR}/git"
 
 inherit systemd
 inherit autotools pkgconfig

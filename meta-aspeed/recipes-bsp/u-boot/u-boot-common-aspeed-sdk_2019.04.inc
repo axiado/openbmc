@@ -10,14 +10,14 @@ PE = "1"
 
 # We use the revision in order to avoid having to fetch it from the
 # repo during parse
-SRCREV = "8e15f5c0b1e7b11296ae6c88b686e65d509237d0"
+SRCREV = "17ae8f018476af91f9c80da8e9ec9ef218e0b6de"
 SRC_URI = "git://git@github.com/openbmc/u-boot.git;nobranch=1;protocol=https"
 
 SRC_URI:append:uboot-flash-32768 = " file://u-boot_flash_32M.cfg"
 SRC_URI:append:uboot-flash-65536 = " file://u-boot_flash_64M.cfg"
+SRC_URI:append:uboot-flash-131072 = " file://u-boot_flash_128M.cfg"
 
-S = "${WORKDIR}/git"
-B = "${WORKDIR}/build"
+B = "${UNPACKDIR}/build"
 do_configure[cleandirs] = "${B}"
 
 # We don't have 'u-boot-initial-env' target in our u-boot version

@@ -54,7 +54,7 @@ FEATURE_PACKAGES_obmc-inventory ?= "packagegroup-obmc-apps-inventory"
 FEATURE_PACKAGES_obmc-leds ?= "packagegroup-obmc-apps-leds"
 FEATURE_PACKAGES_obmc-logging-mgmt ?= "packagegroup-obmc-apps-logging"
 FEATURE_PACKAGES_obmc-remote-logging-mgmt ?= "packagegroup-obmc-apps-remote-logging"
-FEATURE_PACKAGES_obmc-net-ipmi ?= "phosphor-ipmi-net"
+FEATURE_PACKAGES_obmc-net-ipmi ?= "${@bb.utils.contains('DISTRO_FEATURES', 'phosphor-no-ipmi-rmcp', '', 'phosphor-ipmi-net', d)}"
 FEATURE_PACKAGES_obmc-sensors ?= "packagegroup-obmc-apps-sensors"
 FEATURE_PACKAGES_obmc-software ?= "packagegroup-obmc-apps-software"
 FEATURE_PACKAGES_obmc-system-mgmt ?= "${@bb.utils.contains('DISTRO_FEATURES', 'obmc-phosphor-system-mgmt', 'virtual-obmc-system-mgmt', '', d)}"
@@ -67,6 +67,7 @@ FEATURE_PACKAGES_obmc-user-mgmt-ldap ?= "packagegroup-obmc-apps-user-mgmt-ldap"
 FEATURE_PACKAGES_obmc-dmtf-pmci ?= "packagegroup-obmc-apps-dmtf-pmci"
 FEATURE_PACKAGES_obmc-tpm ?= "packagegroup-obmc-apps-tpm"
 FEATURE_PACKAGES_obmc-webui ?= "packagegroup-obmc-apps-webui"
+FEATURE_PACKAGES_obmc-dmtf-spdm ?= "packagegroup-obmc-apps-dmtf-spdm"
 
 # FIXME: phosphor-net-ipmi depends on phosphor-ipmi-host !?!? and
 # cannot be built on core-qemu machines because of the dependency

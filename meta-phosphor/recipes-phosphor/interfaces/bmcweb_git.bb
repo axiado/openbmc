@@ -14,7 +14,7 @@ DEPENDS = " \
     ${@bb.utils.contains('PTEST_ENABLED', '1', 'gtest', '', d)} \
     ${@bb.utils.contains('PTEST_ENABLED', '1', 'gmock', '', d)} \
 "
-SRCREV = "dded61d1d52fd466cc7d7737eeb2b04229108fcd"
+SRCREV = "6a82fead239667b950c92f378cecb31807705b32"
 PV = "1.0+git${SRCPV}"
 
 SRC_URI = "git://github.com/openbmc/bmcweb.git;branch=master;protocol=https"
@@ -22,7 +22,6 @@ SRC_URI += " \
     file://run-ptest \
 "
 
-S = "${WORKDIR}/git"
 SYSTEMD_SERVICE:${PN} += "bmcweb.service bmcweb.socket"
 
 inherit systemd
@@ -33,7 +32,10 @@ PACKAGECONFIG ??= " \
     http-zstd \
     kvm \
     mutual-tls-auth \
+    redfish-allow-rotational-fans \
     redfish-bmc-journal \
+    redfish-oem-manager-fan-data \
+    vm-websocket \
 "
 
 PACKAGECONFIG[dbus-rest] = "-Drest=enabled,-Drest=disabled"
@@ -42,11 +44,15 @@ PACKAGECONFIG[insecure-redfish-expand] = "-Dinsecure-enable-redfish-query=enable
 PACKAGECONFIG[kvm] = "-Dkvm=enabled,-Dkvm=disabled"
 PACKAGECONFIG[mutual-tls-auth] = "-Dmutual-tls-auth=enabled,-Dmutual-tls-auth=disabled"
 PACKAGECONFIG[redfish-allow-deprecated-power-thermal] = "-Dredfish-allow-deprecated-power-thermal=enabled,-Dredfish-allow-deprecated-power-thermal=disabled"
+PACKAGECONFIG[redfish-allow-rotational-fans] = "-Dredfish-allow-rotational-fans=enabled, -Dredfish-allow-rotational-fans=disabled"
 PACKAGECONFIG[redfish-bmc-journal] = "-Dredfish-bmc-journal=enabled,-Dredfish-bmc-journal=disabled"
 PACKAGECONFIG[redfish-cpu-log] = "-Dredfish-cpu-log=enabled,-Dredfish-cpu-log=disabled"
 PACKAGECONFIG[redfish-dbus-log] = "-Dredfish-dbus-log=enabled,-Dredfish-dbus-log=disabled"
 PACKAGECONFIG[redfish-dump-log] = "-Dredfish-dump-log=enabled,-Dredfish-dump-log=disabled"
+PACKAGECONFIG[redfish-eventlog-managers] = "-Dredfish-eventlog-location=managers,-Dredfish-eventlog-location=systems"
 PACKAGECONFIG[redfish-host-logger] = "-Dredfish-host-logger=enabled,-Dredfish-host-logger=disabled"
+PACKAGECONFIG[redfish-oem-manager-fan-data] = "-Dredfish-oem-manager-fan-data=enabled,-Dredfish-oem-manager-fan-data=disabled"
+PACKAGECONFIG[vm-websocket] = "-Dvm-websocket=enabled,-Dvm-websocket=disabled,,jsnbd"
 
 MUTUAL_TLS_PARSING = "CommonName"
 
@@ -60,11 +66,10 @@ EXTRA_OEMESON = " \
 
 do_install_ptest() {
         install -d ${D}${PTEST_PATH}/test
-        cp -rf ${B}/*_test ${D}${PTEST_PATH}/test/
+        cp -rf ${B}/test/*_test ${D}${PTEST_PATH}/test/
 }
 
 RDEPENDS:${PN} += " \
-    jsnbd \
     phosphor-objmgr \
 "
 

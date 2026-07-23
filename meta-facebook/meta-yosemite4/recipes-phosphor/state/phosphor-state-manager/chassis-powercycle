@@ -183,7 +183,8 @@ chassis-power-cycle()
             # Wait for standby sensors to be ready
             sleep 2
             busctl set-property "$CHASSIS_BUS_NAME""$CHASSIS_ID" "$CHASSIS_OBJ_PATH""$CHASSIS_ID" "$CHASSIS_INTF_NAME" "$CHASSIS_PROPERTY_NAME" s "$CHASSIS_ON_PROPERTY"
-            /usr/libexec/phosphor-state-manager/wait-until-mctp-connection-done "$CHASSIS_ID" && systemctl restart "phosphor-discover-system-state@$CHASSIS_ID.service"
+            /usr/libexec/phosphor-state-manager/wait-until-mctp-connection-done "$CHASSIS_ID"
+            systemctl restart "phosphor-discover-system-state@$CHASSIS_ID.service"
             msg="Chassis$CHASSIS_ID is AC power on"
             echo "${msg}"
             lock_cleanup
@@ -207,14 +208,14 @@ chassis-power-cycle()
 
 sled-cycle()
 {
-    # Remount file system as read-only before doing sled cycle
-    if ! /usr/libexec/phosphor-static-norootfs-init/remount-filesystem-readonly; then
-        msg="Failed to remount /run/mnt-persist as read-only"
+    # Detach file system before doing sled cycle
+    if ! /usr/libexec/phosphor-static-norootfs-init/umount-filesystem; then
+        msg="Failed to unmount /run/mnt-persist"
         echo "${msg}"
         add_sel "${msg}" "Error"
     else
-        # If the remount is succesful, add_sel will fail so we can't log this
-        echo "Succeeded to remount /run/mnt-persist as read-only"
+        # If the detach is succesful, add_sel will fail so we can't log this
+        echo "Succeeded to detach /run/mnt-persist"
     fi
 
     if [ -z "$MANAGEMENT_BOARD_VERSION" ]; then

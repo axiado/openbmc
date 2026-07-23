@@ -11,8 +11,6 @@ inherit python3native
 
 require ${BPN}.inc
 
-S = "${WORKDIR}/git"
-
 POWER_SERVICE_PACKAGES = " \
     ${PN}-chassis \
     ${PN}-cold-redundancy \
@@ -63,6 +61,7 @@ POWER_CONTROL_SVC = "phosphor-power-control.service"
 SYSTEMD_SERVICE:${PN}-chassis = "${CHASSIS_POWER_SVC}"
 SYSTEMD_SERVICE:${PN}-sequencer = "${SEQ_MONITOR_SVC} ${SEQ_PGOOD_SVC}"
 SYSTEMD_SERVICE:${PN}-monitor = "${@bb.utils.contains('PACKAGECONFIG', 'monitor', '${PSU_MONITOR_TMPL}', '', d)}"
+SYSTEMD_AUTO_ENABLE:${PN}-monitor = "disable"
 SYSTEMD_SERVICE:${PN}-psu-monitor = "${@bb.utils.contains('PACKAGECONFIG', 'monitor-ng', '${PSU_MONITOR_SVC}', '', d)}"
 SYSTEMD_SERVICE:${PN}-regulators = "${REGS_SVC} ${REGS_CONF_SVC} ${REGS_MON_ENA_SVC} ${REGS_MON_DIS_SVC}"
 SYSTEMD_SERVICE:${PN}-control = "${POWER_CONTROL_SVC}"
@@ -72,7 +71,7 @@ EXTRA_OEMESON:append = " -Dtests=disabled"
 # TODO: cold-redundancy is not installed in the repo yet
 # FILES:${PN}-cold-redundancy = "${bindir}/cold-redundancy"
 
-FILES:${PN}-chassis = "${libexecdir}/phosphor-power/phosphor-chassis-power"
+FILES:${PN}-chassis = "${libexecdir}/phosphor-power/phosphor-chassis-power ${datadir}/phosphor-chassis-power"
 FILES:${PN}-monitor = "${bindir}/psu-monitor"
 FILES:${PN}-psu-monitor = "${bindir}/phosphor-psu-monitor ${datadir}/phosphor-psu-monitor"
 FILES:${PN}-regulators = "${bindir}/phosphor-regulators ${datadir}/phosphor-regulators"

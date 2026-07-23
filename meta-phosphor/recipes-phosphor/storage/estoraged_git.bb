@@ -9,13 +9,12 @@ DEPENDS += "openssl"
 DEPENDS += "phosphor-logging"
 DEPENDS += "sdbusplus"
 DEPENDS += "stdplus"
-SRCREV = "9066ff65e9a3dd6322d984eae02d44443551ae3e"
+SRCREV = "42324dd90d00aa16b27d2defe774811bb3002480"
 PV = "0.1+git${SRCPV}"
 PR = "r1"
 
 SRC_URI = "git://github.com/openbmc/estoraged.git;branch=master;protocol=https"
 
-S = "${WORKDIR}/git"
 SYSTEMD_PACKAGES = "${PN}"
 SYSTEMD_SERVICE:${PN} += "xyz.openbmc_project.eStoraged.service"
 
@@ -24,3 +23,4 @@ inherit meson pkgconfig systemd
 EXTRA_OEMESON = "-Dtests=disabled"
 
 RDEPENDS:${PN} += "e2fsprogs"
+RDEPENDS:${PN} += "e2fsprogs-e2fsck"

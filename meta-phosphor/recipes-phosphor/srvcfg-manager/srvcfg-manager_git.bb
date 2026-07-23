@@ -12,7 +12,7 @@ DEPENDS = " \
     sdbusplus \
     systemd \
     "
-SRCREV = "b35f7fcb7aded18b78f1429c3c6f95594d146d5c"
+SRCREV = "4371262d4530a6de014b4d3ce909da388104361f"
 PV = "1.0+git${SRCPV}"
 PR = "r1"
 
@@ -20,7 +20,6 @@ SRC_URI = "git://github.com/openbmc/service-config-manager;branch=master;protoco
 
 PACKAGECONFIG[persist-settings-to-file] = "-Dpersist-settings-to-file=enabled,-Dpersist-settings-to-file=disabled"
 
-S = "${WORKDIR}/git"
 SYSTEMD_SERVICE:${PN} = "srvcfg-manager.service"
 
 inherit meson pkgconfig systemd

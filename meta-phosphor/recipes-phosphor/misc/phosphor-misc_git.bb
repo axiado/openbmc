@@ -3,7 +3,7 @@ HOMEPAGE = "https://github.com/openbmc/phosphor-misc"
 LICENSE = "Apache-2.0"
 LIC_FILES_CHKSUM = "file://LICENSE;md5=e3fc50a88d0a364313df4b21ef20c29e"
 DEPENDS = "systemd"
-SRCREV = "adb587b3de8c740413d3c19eac328e3ff7656da6"
+SRCREV = "a91e2f8690cfadda98b6ae26a692bebe8389a254"
 PACKAGECONFIG ??= " \
     first-boot-set-hostname \
     first-boot-set-mac \
@@ -19,7 +19,6 @@ PR = "r1"
 
 SRC_URI = "git://github.com/openbmc/phosphor-misc;branch=master;protocol=https"
 
-S = "${WORKDIR}/git"
 SYSTEMD_PACKAGES = "${PHOSPHOR_MISC_PACKAGES}"
 SYSTEMD_SERVICE:${PN}-first-boot-set-hostname = "first-boot-set-hostname.service"
 SYSTEMD_SERVICE:${PN}-first-boot-set-mac = "first-boot-set-mac@.service"

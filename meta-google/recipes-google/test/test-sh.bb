@@ -6,14 +6,13 @@ LIC_FILES_CHKSUM = "file://${COREBASE}/meta/files/common-licenses/Apache-2.0;md5
 FILESEXTRAPATHS:prepend := "${THISDIR}/${PN}:"
 SRC_URI += "file://lib.sh"
 SRC_URI += "file://test.sh"
-S = "${WORKDIR}/sources"
-UNPACKDIR = "${S}"
+S = "${UNPACKDIR}"
 
 DATA = "${datadir}/test"
 FILES:${PN} += "${DATA}"
 
 do_compile() {
-  SYSROOT="$PKG_CONFIG_SYSROOT_DIR" bash test.sh || exit
+  SYSROOT="${STAGING_DIR_HOST}" bash test.sh || exit
 }
 
 do_install:append() {
