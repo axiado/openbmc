@@ -35,11 +35,23 @@
 	};
 
 	/delete-node/ display-subsystem;
+
+	soc {
+		/delete-node/ mailbox0;
+		/delete-node/ mctp-mailbox;
+		/delete-node/ pcie_x1;
+		/delete-node/ hcp;
+		/delete-node/ video;
+	};
 };
 
-/delete-node/ &ipc_shared_mem;
-/delete-node/ &ipc0;
-/delete-node/ &dmac;
+/delete-node/ &pci_ep_disp;
+/delete-node/ &pci_ep_ctrl;
+/delete-node/ &shm_ap_to_rot;
+/delete-node/ &shm_rot_to_ap;
+/delete-node/ &rot_fwu;
+/delete-node/ &disp_ctrl;
+/delete-node/ &hdmi;
 
 &gpio0 {
 	status = "okay";
@@ -114,33 +126,5 @@
 };
 
 &uart8 {
-	status = "okay";
-};
-
-&i3c6 {
-	status = "okay";
-};
-
-&i3c7 {
-	status = "okay";
-};
-
-&i3c8 {
-	status = "okay";
-};
-
-&i3c9 {
-	status = "okay";
-};
-
-&i3c12 {
-	status = "okay";
-};
-
-&i3c13 {
-	status = "okay";
-};
-
-&i3c22 {
 	status = "okay";
 };
