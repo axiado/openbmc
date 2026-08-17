@@ -10,7 +10,7 @@
 bootloader --ptable gpt
 
 #env
-part --align 4 --fixed-size 1M --source rawcopy --sourceparams="file=${DEPLOY_DIR_IMAGE}/u-boot-env.bin"
+part --align 4 --fixed-size 1M --source rawcopy --sourceparams="file=${DEPLOY_DIR_IMAGE}/u-boot-axiado-initial-env.bin"
 
 #boot a/b
 part --fstype=ext4 --fixed-size 64M --source bootimg-partition --label boot-a

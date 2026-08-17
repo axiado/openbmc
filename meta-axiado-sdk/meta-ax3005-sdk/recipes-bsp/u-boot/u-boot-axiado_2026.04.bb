@@ -6,15 +6,9 @@ SRC_URI = "git://bitbucket.org/ax-engg/u-boot_ultra.git;protocol=https;branch=${
 
 DEPENDS += "ax-bsp-headers"
 
-UBOOT_ENV_SRC = "build/u-boot-initial-env"
-
 do_configure:prepend() {
     cp ${RECIPE_SYSROOT}/${includedir}/ax-bsp-headers/soc_memory_map_b0.h ${S}/include/configs/
     cp ${RECIPE_SYSROOT}/${includedir}/ax-bsp-headers/flash_map_ultra.h ${S}/include/configs/
-}
-
-do_compile:append() {
-    ${B}/tools/mkenvimage -s ${UBOOT_ENV_SIZE} -o ${B}/${UBOOT_ENV_BINARY} ${B}/u-boot-initial-env
 }
 
 PV = "2026.04+dev"
