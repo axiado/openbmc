@@ -1,6 +1,7 @@
 require recipes-bsp/images/bmc-pb.inc
 
-SRCREV = "20998ca51ce8f3b5783531820210e4f9a07064a1"
+# BU2-553
+SRCREV = "257401106429bcb3effa93032fec575b09e714e6"
 SRCBRANCH = "master"
 SRC_URI = "git://bitbucket.org/ax-engg/ax-bsp-prebuild.git;protocol=https;branch=${SRCBRANCH}"
 SRC_URI += "file://ax-images.toml"
@@ -20,4 +21,6 @@ do_deploy:append() {
     install -m 0644 ${S}/ax3005/images/sbl.bin ${DEPLOYDIR}
     install -m 0644 ${S}/ax3005/images/secmc.img.ebin ${DEPLOYDIR}
 # sysmgr.bin is deployed by irot recipe
+# bl31.bin is deployed by truested-firmware-a recipe
+# tee-pager_v2.bin is deployed by optee-os recipe
 }

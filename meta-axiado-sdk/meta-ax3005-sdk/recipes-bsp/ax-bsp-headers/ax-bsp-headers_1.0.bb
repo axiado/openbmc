@@ -4,9 +4,10 @@ LICENSE = "CLOSED"
 
 PV = "1.0+dev"
 
+# BU2-553
+SRCREV = "d725372aad9fda78b2db79f8612f22fc3bb87d50"
 SRCBRANCH = "release/release-u-0.2.0"
 SRC_URI += "git://bitbucket.org/ax-engg/ax-bsp-headers.git;protocol=https;branch=${SRCBRANCH}"
-SRCREV = "ee4b990b9616dfd0578c6536a73240374bc6f62f"
 
 do_configure[noexec] = "1"
 do_compile[noexec] = "1"
