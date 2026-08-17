@@ -21,14 +21,14 @@ ignore_auth_check = true
 
 [[ax_images]]
 id = 3
-path = "images/sbl.bin"
+path = "images/bl31.bin"
 svn = 1
 source = 1
 ignore_auth_check = true
 
 [[ax_images]]
 id = 4
-path = "images/sbl.bin"
+path = "images/tee-pager_v2.bin"
 svn = 1
 source = 1
 ignore_auth_check = true

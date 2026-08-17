@@ -47,6 +47,7 @@ EXTRA_OECMAKE = "\
     -DRECIPE_SYSROOT_INCLUDE_DIR=${RECIPE_SYSROOT}${includedir}/ax-bsp-headers \
     -DKW_ROOT=${S} \
     -DCORE_NUM=CORE0 \
+    -DENABLE_OPTEE=ON \
 "
 
 do_install() {

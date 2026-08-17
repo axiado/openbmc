@@ -31,6 +31,8 @@ do_configure() {
     cp ${RECIPE_SYSROOT}${datadir}/axiado/images/sbl.bin ${S}/images/
     cp ${RECIPE_SYSROOT}${datadir}/axiado/images/secmc.img.ebin ${S}/images/
     cp ${RECIPE_SYSROOT}${datadir}/axiado/images/sysmgr.bin ${S}/images/
+    cp ${RECIPE_SYSROOT}${datadir}/axiado/images/bl31.bin ${S}/images/
+    cp ${RECIPE_SYSROOT}${datadir}/axiado/images/tee-pager_v2.bin ${S}/images/
 
     # BMC images
     cp ${DEPLOY_DIR_IMAGE}/u-boot.bin ${S}/images/
