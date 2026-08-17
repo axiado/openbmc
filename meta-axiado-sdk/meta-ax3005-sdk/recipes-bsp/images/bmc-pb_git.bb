@@ -1,8 +1,9 @@
 require recipes-bsp/images/bmc-pb.inc
 
-SRCREV = "20998ca51ce8f3b5783531820210e4f9a07064a1"
+# BU2-553
+SRCREV = "257401106429bcb3effa93032fec575b09e714e6"
 SRCBRANCH = "master"
-SRC_URI = "git://github.com/axiado/bmc_pb.git;protocol=https;branch=${SRCBRANCH}"
+SRC_URI = "git://git@github.com/axiado/bmc_pb;protocol=ssh;branch=${SRCBRANCH}"
 SRC_URI += "file://ax-images.toml"
 
 PV = "1.0+git"
@@ -20,4 +21,6 @@ do_deploy:append() {
     install -m 0644 ${S}/ax3005/images/sbl.bin ${DEPLOYDIR}
     install -m 0644 ${S}/ax3005/images/secmc.img.ebin ${DEPLOYDIR}
     install -m 0644 ${S}/ax3005/images/sysmgr.bin ${DEPLOYDIR}
+    install -m 0644 -D ${S}/ax3005/images/bl31.bin ${DEPLOYDIR}/trusted-firmware-a/bl31.bin
+    install -m 0644 -D ${S}/ax3005/images/tee-pager_v2.bin ${DEPLOYDIR}/optee/tee-pager_v2.bin
 }

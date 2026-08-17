@@ -1,6 +1,6 @@
 LIC_FILES_CHKSUM = "file://docs/license.rst;md5=1118e32884721c0be33267bd7ae11130"
 
-SRCREV_tfa = "17979655c872ef4de437f6511f6fcce866f9555e"
+SRCREV_tfa = "57489efabfc977f120b4e3e26cbd4f5d7a00d323"
 SRCBRANCH = "release/release-u-0.2.0"
 SRC_URI_TRUSTED_FIRMWARE_A = "git://bitbucket.org/ax-engg/trusted-firmware-a.git;protocol=https"
 

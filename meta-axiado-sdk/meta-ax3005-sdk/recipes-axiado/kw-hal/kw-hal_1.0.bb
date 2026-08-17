@@ -3,10 +3,10 @@ require kw-hal.inc
 DEPENDS += "ax-bsp-headers"
 
 SRCREV_FORMAT:append = "_caliptra-sw"
-# BU2-551
-SRCREV_kw-hal = "d2f92649dae2e7bb7aff3efac886c9e6e53324a1"
-SRCREV_ax-hal = "0944df4675c266c1da15f8e7164bfed3bb9538a0"
-SRCREV_bali-hal = "505d66659ec726911a41f9d6599a054a83f6c93f"
+# BU2-553
+SRCREV_kw-hal = "00fadf275896403653339b7217066cdde8a80e5f"
+SRCREV_ax-hal = "071d59902561f8f13624944d86cf12a9dcc58431"
+SRCREV_bali-hal = "df3f92e91a3f9c1d8035660aa25c4d6fdbf7bcba"
 SRCREV_caliptra-sw = "f6999a2ee7428f03afb926e5f328479be7b4ea1d"
 
 SRCBRANCH = "release/release-u-0.2.0"
