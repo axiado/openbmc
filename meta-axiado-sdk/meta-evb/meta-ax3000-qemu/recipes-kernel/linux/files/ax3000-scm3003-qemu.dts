@@ -295,3 +295,7 @@
 &update {
 	status = "disabled";
 };
+
+&rtc0 {
+	status = "disabled";
+};
