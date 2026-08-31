@@ -16,7 +16,7 @@
 
   This layer contains the following recipes for Axiado AX3005 SoC :
   - `U-boot`             : 2026.04
-  - `kernel`             : 6.6.106
+  - `kernel`             : 6.18.20
   - `Logmgr`             : Axiado log manager
   - `Caliptra-sw`        : Caliptra firmware and software
   - `Kw-hal`             : A hardware abstraction layer (HAL) SDK with FreeRTOS integration
