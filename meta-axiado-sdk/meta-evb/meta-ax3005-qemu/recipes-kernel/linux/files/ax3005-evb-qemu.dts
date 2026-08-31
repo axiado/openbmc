@@ -35,10 +35,10 @@
 	};
 
 	/delete-node/ display-subsystem;
+	/delete-node/ mctp-mailbox;
 
 	soc {
 		/delete-node/ mailbox0;
-		/delete-node/ mctp-mailbox;
 		/delete-node/ pcie_x1;
 		/delete-node/ hcp;
 		/delete-node/ video;
