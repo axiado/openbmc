@@ -1,0 +1,46 @@
+From 97f51caf0833a9561621c54720b7ff5050e2d710 Mon Sep 17 00:00:00 2001
+From: Kuan-Jui Chiu <kchiu@axiado.com>
+Date: Wed, 12 Aug 2026 23:55:58 -0700
+Subject: [PATCH] Enable ARM TrustZone
+
+Reserve memory for ARM TrustZone firmware and enable TEE driver
+
+Upstream-Status: Pending
+Signed-off-by: Kuan-Jui Chiu <kchiu@axiado.com>
+---
+ arch/arm64/boot/dts/axiado/ax3005.dtsi | 12 ++++++++++++
+ 1 file changed, 12 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/axiado/ax3005.dtsi b/arch/arm64/boot/dts/axiado/ax3005.dtsi
+index 7114931147b4..40192692580d 100644
+--- a/arch/arm64/boot/dts/axiado/ax3005.dtsi
++++ b/arch/arm64/boot/dts/axiado/ax3005.dtsi
+@@ -88,6 +88,13 @@ l2: l2-cache0 {
+ 		};
+ 	};
+ 
++	firmware {
++		optee: optee {
++			compatible = "linaro,optee-tz";
++			method = "smc";
++		};
++	};
++
+ 	reserved-memory {
+ 		#address-cells = <2>;
+ 		#size-cells = <2>;
+@@ -125,6 +132,11 @@ ax_logger_mem: ax_logger_mem@87000000 {
+ 			reg = <0x0 0x87000000 0x0 0x600000>; /* 6 MB */
+ 			no-map;
+ 		};
++		secure_ddr: secure_ddr@88300000 {
++			/* TZ_RAM: TF-A BL31 + OP-TEE OS + TA space + SHMEM (16 MB) */
++			reg = <0x00 0x88300000 0x00 0x01000000>;
++			no-map;
++		};
+ 	};
+ 
+ 	display-subsystem {
+-- 
+2.34.1
+
