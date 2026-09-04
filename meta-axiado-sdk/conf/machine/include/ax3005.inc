@@ -15,4 +15,6 @@ PREFERRED_PROVIDER_u-boot-fw-utils ?= "libubootenv"
 
 COMPATIBLE_MACHINE:axiado-ax3005 = "axiado-ax3005"
 
+OPTEEMACHINE = "axiado-ax3005"
+
 require conf/machine/include/axiado.inc
