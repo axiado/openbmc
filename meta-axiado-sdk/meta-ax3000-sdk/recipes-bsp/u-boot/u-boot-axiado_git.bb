@@ -2,7 +2,7 @@ require recipes-bsp/u-boot/u-boot-axiado.inc
 
 DEPENDS += "bc-native"
 
-SRCREV = "f38e2c92c6991ef28b6871c0631ad66cd4189655"
+SRCREV = "b08355f003675f0ed0043af40b20645b2439f7a8"
 SRCBRANCH = "u-boot-2019.04-axiado"
 SRC_URI = "git://github.com/axiado/u-boot-axiado;protocol=https;branch=${SRCBRANCH}"
 SRC_URI += "file://u-boot-axiado-env"

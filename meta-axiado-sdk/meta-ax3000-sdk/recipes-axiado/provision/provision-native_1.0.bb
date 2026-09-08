@@ -2,7 +2,7 @@ require provision.inc
 
 PV = "1.0+dev"
 
-SRCREV = "edbae7583817b766e97b67beb5faa71a03689d5b"
+SRCREV = "15fc17c0685e132186218ba0d170c11edfffe5b6"
 SRCBRANCH = "release/release-0.18.0"
 SRC_URI = "git://bitbucket.org/ax-engg/provision.git;protocol=https;branch=${SRCBRANCH}"
 SRC_URI += "file://sign.txt"
