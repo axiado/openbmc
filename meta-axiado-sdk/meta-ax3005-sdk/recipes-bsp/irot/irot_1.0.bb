@@ -23,9 +23,9 @@ SRC_URI = "${SRC_URI_KW_HAL};branch=${SRCBRANCH};name=kw-hal \
            "
 
 # BU2-553
-SRCREV_kw-hal = "00fadf275896403653339b7217066cdde8a80e5f"
-SRCREV_ax-hal = "071d59902561f8f13624944d86cf12a9dcc58431"
-SRCREV_bali-hal = "df3f92e91a3f9c1d8035660aa25c4d6fdbf7bcba"
+SRCREV_kw-hal = "a80b2bf6da204acaf863dffb69bd2e9386edc866"
+SRCREV_ax-hal = "fcd8f64bafcfc2caa389a3678eaed45a0ddac9b5"
+SRCREV_bali-hal = "6d3d984538d38e9bb4b2944ed2d8b0d0ff7fd13e"
 SRCREV_caliptra-sw = "f6999a2ee7428f03afb926e5f328479be7b4ea1d"
 
 DEPENDS = "cmake-native gcc-arm-none-eabi-native kw-hal ax-bsp-headers"
