@@ -1,1 +1,1 @@
-RDEPENDS:${PN}-extras += "optee-examples optee-test"
+RDEPENDS:${PN}-extras:evk-ax3005:append = " optee-examples optee-test"
