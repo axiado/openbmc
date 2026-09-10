@@ -22,7 +22,7 @@ SRC_URI = "${SRC_URI_KW_HAL};branch=${SRCBRANCH};name=kw-hal \
            file://0003-ax_hal-Add-sysroot-into-the-list-of-headers-path.patch;patchdir=${S}/ax_hal \
            "
 
-# BU2-553
+# BU2A-557
 SRCREV_kw-hal = "a80b2bf6da204acaf863dffb69bd2e9386edc866"
 SRCREV_ax-hal = "fcd8f64bafcfc2caa389a3678eaed45a0ddac9b5"
 SRCREV_bali-hal = "6d3d984538d38e9bb4b2944ed2d8b0d0ff7fd13e"
