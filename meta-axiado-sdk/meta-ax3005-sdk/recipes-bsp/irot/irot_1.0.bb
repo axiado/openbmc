@@ -3,34 +3,30 @@ LICENSE = "CLOSED"
 
 PV = "1.0+dev"
 
+require kw-hal-src.inc
+require ax-hal-src.inc
+require bali-hal-src.inc
+require sysmgr-src.inc
+
 inherit deploy cmake
 
-SRCBRANCH = "release/release-u-0.2.0"
+SRCREV_FORMAT = "kw-hal_ax-hal_bali-hal_sysmgr"
 
-SRCREV_FORMAT = "kw-hal_ax-hal_bali-hal_caliptra-sw"
-SRC_URI_KW_HAL = "git://bitbucket.org/ax-engg/kw-hal.git;protocol=https"
-SRC_URI_AX_HAL = "git://bitbucket.org/ax-engg/ax_hal.git;protocol=https"
-SRC_URI_BAIL_HAL = "gitsm://bitbucket.org/ax-engg/bali.git;protocol=https"
-SRC_URI_CALIPTRA_SW = "gitsm://bitbucket.org/ax-engg/caliptra-sw.git;protocol=https"
-
-SRC_URI = "${SRC_URI_KW_HAL};branch=${SRCBRANCH};name=kw-hal \
-           ${SRC_URI_AX_HAL};branch=${SRCBRANCH};name=ax-hal;destsuffix=${P}/ax_hal \
-           ${SRC_URI_BAIL_HAL};branch=${SRCBRANCH};name=bali-hal;destsuffix=${P}/bali_hal \
-           ${SRC_URI_CALIPTRA_SW};branch=${SRCBRANCH};name=caliptra-sw;destsuffix=${P}/caliptra-sw \
+SRC_URI = "${SRC_URI_KW_HAL};name=kw-hal \
+           ${SRC_URI_AX_HAL};name=ax-hal;destsuffix=${P}/ax_hal \
+           ${SRC_URI_BALI_HAL};name=bali-hal;destsuffix=${P}/bali_hal \
+           ${SRC_URI_SYSMGR};name=sysmgr;destsuffix=${P}/sysmgr_ultra \
            file://0001-freertos_r52_kernel_support.patch;patchdir=${S}/bali_hal/library/FreeRTOS-Kernel \
-           file://0002-sysmgr-use-prebuilt-bali-hal-impl.patch;patchdir=${S} \
            file://0003-ax_hal-Add-sysroot-into-the-list-of-headers-path.patch;patchdir=${S}/ax_hal \
+           file://0004-r52-compile-args-limit-ffreestanding-to-C-and-ASM-on.patch;patchdir=${S} \
+           file://0005-ax-ultra-CMakeLists-limit-ffreestanding-to-C-and-ASM.patch;patchdir=${S}/bali_hal \
+           file://0007-ax_hal-allow-caliptra-paths-to-be-set-externally.patch;patchdir=${S}/ax_hal \
+           file://0008-base-allow-caliptra-paths-to-be-set-and-skip-in-tree.patch;patchdir=${S} \
            "
 
-# BU2A-557
-SRCREV_kw-hal = "a80b2bf6da204acaf863dffb69bd2e9386edc866"
-SRCREV_ax-hal = "fcd8f64bafcfc2caa389a3678eaed45a0ddac9b5"
-SRCREV_bali-hal = "6d3d984538d38e9bb4b2944ed2d8b0d0ff7fd13e"
-SRCREV_caliptra-sw = "f6999a2ee7428f03afb926e5f328479be7b4ea1d"
+DEPENDS = "cmake-native gcc-arm-none-eabi-native ax-bsp-headers libcaliptra"
 
-DEPENDS = "cmake-native gcc-arm-none-eabi-native kw-hal ax-bsp-headers"
-
-OECMAKE_SOURCEPATH = "${S}/sysmgr"
+OECMAKE_SOURCEPATH = "${S}/sysmgr_ultra"
 
 OECMAKE_GENERATOR = "Unix Makefiles"
 
@@ -41,13 +37,17 @@ OECMAKE_GENERATOR = "Unix Makefiles"
 # ${WORKDIR}/toolchain.cmake. arm-none-eabi.cmake sets the R52 compilers and
 # CMAKE_SYSTEM_NAME=Generic before project(), which the CMakeLists requires.
 EXTRA_OECMAKE = "\
-    -DCMAKE_TOOLCHAIN_FILE=${S}/sysmgr/arm-none-eabi.cmake \
+    -DCMAKE_TOOLCHAIN_FILE=${S}/sysmgr_ultra/arm-none-eabi.cmake \
     -DTOOLCHAIN_PATH=${STAGING_DIR_NATIVE}/usr \
     -DCMAKE_SYSROOT=${RECIPE_SYSROOT} \
     -DRECIPE_SYSROOT_INCLUDE_DIR=${RECIPE_SYSROOT}${includedir}/ax-bsp-headers \
     -DKW_ROOT=${S} \
     -DCORE_NUM=CORE0 \
     -DENABLE_OPTEE=ON \
+    -DBUILD_LIBCALIPTRA=OFF \
+    -DLIBCALIPTRA_DIR=${RECIPE_SYSROOT}${nonarch_base_libdir}/libcaliptra \
+    -DLIBCALIPTRA_INCLUDE=${RECIPE_SYSROOT}${includedir}/libcaliptra \
+    -DRTL_SOC_IFC_INCLUDE=${RECIPE_SYSROOT}${includedir}/libcaliptra \
 "
 
 do_install() {

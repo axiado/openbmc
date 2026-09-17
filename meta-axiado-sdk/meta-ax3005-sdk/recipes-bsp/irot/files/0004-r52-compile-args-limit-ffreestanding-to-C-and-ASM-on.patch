@@ -1,5 +1,6 @@
-From: Axiado Corporation <engineering@axiado.com>
-Date: 2025-01-01 00:00:00
+From 85976e2ae0a44c9514d51b60718f9952fa9017af Mon Sep 17 00:00:00 2001
+From: Kuan-Jui Chiu <kchiu@axiado.com>
+Date: Wed, 16 Sep 2026 00:00:00 +0000
 Subject: [PATCH] r52-compile-args: limit -ffreestanding to C and ASM only
 
 GCC 13 arm-none-eabi in -ffreestanding C++ mode no longer exposes hosted
@@ -8,11 +9,16 @@ in this project use hosted stdlib functions, so restrict -ffreestanding to
 C and ASM compilation units only.
 
 Upstream-Status: Inappropriate [GCC 13 toolchain compatibility fix]
-Signed-off-by: Axiado Corporation <engineering@axiado.com>
+Signed-off-by: Kuan-Jui Chiu <kchiu@axiado.com>
 ---
+ base/r52-compile-args.cmake | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/base/r52-compile-args.cmake b/base/r52-compile-args.cmake
+index 206f1aa..8017a1f 100644
 --- a/base/r52-compile-args.cmake
 +++ b/base/r52-compile-args.cmake
-@@ -65,7 +65,8 @@
+@@ -65,7 +65,8 @@ endif()
  add_compile_options(
  	-mcpu=${GCC_CPU}
  	-DCURRENT_CPU_ID=SVM_CPU_ID -DCMAKE_TOOLCHAIN_FILE=${COMPILE_ARG_FILE}
@@ -22,3 +28,6 @@ Signed-off-by: Axiado Corporation <engineering@axiado.com>
  	"$<$<CONFIG:DEBUG>:-gdwarf-3>"
  	"$<$<COMPILE_LANGUAGE:CXX>:-fno-unwind-tables;-fno-rtti;-fno-exceptions>"
  	-fdata-sections
+-- 
+2.34.1
+
