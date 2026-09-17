@@ -1,0 +1,89 @@
+From 0ce57d2bf1c6d7a7f175755a0fa48cd03971dc04 Mon Sep 17 00:00:00 2001
+From: Kuan-Jui Chiu <kchiu@axiado.com>
+Date: Wed, 16 Sep 2026 00:00:00 +0000
+Subject: [PATCH] base: allow caliptra paths to be set and skip in-tree build
+
+caliptra-sw is packaged as its own recipe, so ${AX_ROOT}/../caliptra-sw
+does not exist in this tree. Two changes:
+
+  * Guard the path defaults so LIBCALIPTRA_DIR / LIBCALIPTRA_INCLUDE /
+    RTL_SOC_IFC_INCLUDE can point at an installed copy.
+  * Put the build_libcaliptra custom target behind BUILD_LIBCALIPTRA.
+    It runs "make -C ${LIBCALIPTRA_DIR}", which cannot work when that
+    directory is a staged install rather than a source checkout.
+
+Upstream-Status: Pending [submitted to Axiado kw-hal]
+Signed-off-by: Kuan-Jui Chiu <kchiu@axiado.com>
+---
+ base/CMakeLists.txt | 50 ++++++++++++++++++++++++++++++---------------
+ 1 file changed, 34 insertions(+), 16 deletions(-)
+
+diff --git a/base/CMakeLists.txt b/base/CMakeLists.txt
+index 59f7244..9663f62 100644
+--- a/base/CMakeLists.txt
++++ b/base/CMakeLists.txt
+@@ -223,27 +223,45 @@ add_library(base::hal ALIAS base_hal)
+ # Caliptra specific configuration
+ if(DEFINED CONFIG_AX_ENABLE_CALIPTRA AND CONFIG_AX_ENABLE_CALIPTRA)
+ 	set(TOOLCHAIN_PREFIX arm-none-eabi-)
+-	set(LIBCALIPTRA_DIR ${AX_ROOT}/../caliptra-sw/libcaliptra)
++	if(NOT DEFINED BUILD_LIBCALIPTRA)
++		set(BUILD_LIBCALIPTRA ON)
++	endif()
++
++	if(NOT DEFINED LIBCALIPTRA_DIR)
++		set(LIBCALIPTRA_DIR ${AX_ROOT}/../caliptra-sw/libcaliptra)
++	endif()
++
++	if(NOT DEFINED LIBCALIPTRA_INCLUDE)
++		set(LIBCALIPTRA_INCLUDE ${LIBCALIPTRA_DIR}/inc)
++	endif()
++
++	if(NOT DEFINED RTL_SOC_IFC_INCLUDE)
++		set(RTL_SOC_IFC_INCLUDE ${LIBCALIPTRA_DIR}/../hw/1.0/rtl/src/soc_ifc/rtl)
++	endif()
++
+     set(LIBCALIPTRA_BIN_DIR ${LIBCALIPTRA_DIR}/build)
+-    set(ENV{RTL_SOC_IFC_INCLUDE_PATH}
+-        ${LIBCALIPTRA_DIR}/../hw/1.0/rtl/src/soc_ifc/rtl
+-    )
++    set(ENV{RTL_SOC_IFC_INCLUDE_PATH} ${RTL_SOC_IFC_INCLUDE})
+     set(CALIPTRA_C_FLAGS
+         "$<JOIN:$<TARGET_PROPERTY:base_hal,COMPILE_OPTIONS>, >"
+     )
+-    add_custom_target(build_libcaliptra ALL
+-        COMMAND ${CMAKE_COMMAND} -E env
+-            RTL_SOC_IFC_INCLUDE_PATH=$ENV{RTL_SOC_IFC_INCLUDE_PATH}
+-            CROSS_COMPILE=${TOOLCHAIN_PREFIX}
+-            CALIPTRA_C_FLAGS=${CALIPTRA_C_FLAGS}
+-            make -C ${LIBCALIPTRA_DIR}
+-        WORKING_DIRECTORY ${LIBCALIPTRA_DIR}
+-        COMMENT "Building libcaliptra with ${CALIPTRA_C_FLAGS}"
+-    )
+-    add_dependencies(base_hal build_libcaliptra)
++    if(BUILD_LIBCALIPTRA)
++        add_custom_target(build_libcaliptra ALL
++            COMMAND ${CMAKE_COMMAND} -E env
++                RTL_SOC_IFC_INCLUDE_PATH=$ENV{RTL_SOC_IFC_INCLUDE_PATH}
++                CROSS_COMPILE=${TOOLCHAIN_PREFIX}
++                CALIPTRA_C_FLAGS=${CALIPTRA_C_FLAGS}
++                make -C ${LIBCALIPTRA_DIR}
++            WORKING_DIRECTORY ${LIBCALIPTRA_DIR}
++            COMMENT "Building libcaliptra with ${CALIPTRA_C_FLAGS}"
++        )
++        add_dependencies(base_hal build_libcaliptra)
++    else()
++        message(NOTICE
++            "BUILD_LIBCALIPTRA=OFF: using pre-built ${LIBCALIPTRA_DIR}/libcaliptra.a")
++    endif()
+     target_include_directories(base_hal PUBLIC
+-        ${LIBCALIPTRA_DIR}/inc
+-        ${LIBCALIPTRA_DIR}/../hw/1.0/rtl/src/soc_ifc/rtl
++        ${LIBCALIPTRA_INCLUDE}
++        ${RTL_SOC_IFC_INCLUDE}
+     )
+     target_link_libraries(base_hal PUBLIC
+         ${LIBCALIPTRA_DIR}/libcaliptra.a
+-- 
+2.34.1
+

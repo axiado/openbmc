@@ -2,9 +2,8 @@
 
 SUMMARY = "Caliptra software image bundle"
 SECTION = "axiado/firmware"
-LICENSE = "Apache-2.0"
-LIC_FILES_CHKSUM = "file://LICENSE;md5=86d3f3a95c324c9479bd8986968f4327"
 
+require caliptra-sw-src.inc
 inherit cargo deploy
 
 # Disable the class's built-in vendoring; crates are fetched directly from the
@@ -57,5 +56,6 @@ do_deploy() {
 }
 
 FILES:${PN} += "${nonarch_base_libdir}/firmware/caliptra/image-bundle.bin"
+FILES:${PN}-dev += "${includedir}/caliptra/*.h"
 
 addtask do_deploy before do_build after do_install

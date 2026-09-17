@@ -1,0 +1,49 @@
+From 5e16d27f086d7112c52dcf668cc1ce1c401256e6 Mon Sep 17 00:00:00 2001
+From: Kuan-Jui Chiu <kchiu@axiado.com>
+Date: Wed, 16 Sep 2026 00:00:00 +0000
+Subject: [PATCH] ax_hal: allow caliptra paths to be set externally
+
+The caliptra-sw submodule is packaged as its own recipe rather than
+being checked out inside the kw-hal tree, so the hardcoded in-tree
+layout (${LIBCALIPTRA_DIR}/inc and ../hw/1.0/rtl/src/soc_ifc/rtl) does
+not exist here. Guard the defaults so a caller can point
+LIBCALIPTRA_DIR / LIBCALIPTRA_INCLUDE / RTL_SOC_IFC_INCLUDE at an
+installed copy, and keep the in-tree paths as the fallback.
+
+Upstream-Status: Pending [submitted to Axiado ax_hal]
+Signed-off-by: Kuan-Jui Chiu <kchiu@axiado.com>
+---
+ CMakeLists.txt | 19 +++++++++++++++----
+ 1 file changed, 15 insertions(+), 4 deletions(-)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 485ceadb..e96624c9 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -86,8 +86,19 @@ endif()
+ target_include_directories(axhal PRIVATE ${AXHAL_INCLUDES})
+ 
+ # Configure and enable libcaliptra
+-set(LIBCALIPTRA_DIR ${AXHAL_ROOT}/../caliptra-sw/libcaliptra)
+-set(ENV{RTL_SOC_IFC_INCLUDE_PATH} ${LIBCALIPTRA_DIR}/../hw/1.0/rtl/src/soc_ifc/rtl)
+-target_include_directories(axhal PUBLIC ${LIBCALIPTRA_DIR}/inc)
+-target_include_directories(axhal PUBLIC ${LIBCALIPTRA_DIR}/../hw/1.0/rtl/src/soc_ifc/rtl)
++if(NOT DEFINED LIBCALIPTRA_DIR)
++	set(LIBCALIPTRA_DIR ${AXHAL_ROOT}/../caliptra-sw/libcaliptra)
++endif()
++
++if(NOT DEFINED LIBCALIPTRA_INCLUDE)
++	set(LIBCALIPTRA_INCLUDE ${LIBCALIPTRA_DIR}/inc)
++endif()
++
++if(NOT DEFINED RTL_SOC_IFC_INCLUDE)
++	set(RTL_SOC_IFC_INCLUDE ${LIBCALIPTRA_DIR}/../hw/1.0/rtl/src/soc_ifc/rtl)
++endif()
++
++set(ENV{RTL_SOC_IFC_INCLUDE_PATH} ${RTL_SOC_IFC_INCLUDE})
++target_include_directories(axhal PUBLIC ${LIBCALIPTRA_INCLUDE})
++target_include_directories(axhal PUBLIC ${RTL_SOC_IFC_INCLUDE})
+ target_link_libraries(axhal PUBLIC ${LIBCALIPTRA_DIR}/libcaliptra.a)
+-- 
+2.34.1
+

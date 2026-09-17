@@ -1,4 +1,4 @@
-From e1dc35b46923b979cbb0d89c8aef6e3fc9c09774 Mon Sep 17 00:00:00 2001
+From 0cf70eae89893d2c38666237105d1ac81253ea0c Mon Sep 17 00:00:00 2001
 From: Kuan-Jui Chiu <kchiu@axiado.com>
 Date: Wed, 27 May 2026 03:46:08 -0700
 Subject: [PATCH] ax_hal: Add sysroot into the list of headers path
