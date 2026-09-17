@@ -1,8 +1,3 @@
-RDEPENDS:${PN}-network += " ax-net iptables iproute2 net-tools"
-RDEPENDS:${PN}-extras += "axiado-eip-firmware \
-                          boot-state \
-                          gptfdisk \
-                          logmgr \
-                          parted \
-                          tcu-reset \
-                         "
+RDEPENDS:${PN}-network:append = " ax-net iptables iproute2 net-tools"
+RDEPENDS:${PN}-extras:append = " gptfdisk parted"
+RDEPENDS:${PN}-extras:append = " axiado-eip-firmware boot-state logmgr tcu-reset"
