@@ -1,0 +1,51 @@
+From d80fed24a83bdc8078f0b32e9991570470fc5d0f Mon Sep 17 00:00:00 2001
+From: Kuan-Jui Chiu <kchiu@axiado.com>
+Date: Sun, 20 Sep 2026 23:02:04 -0700
+Subject: [PATCH] boot: Correct BOOT_BUILD_ROOT in CMakeLists
+
+Generated artifacts (autoconf.h/.out, libs) belong in the CMake binary dir so
+that out-of-tree builds work and nothing is written into the source tree.For
+the usual standalone invocation (cmake -B build) this is the same boot/build
+directory as before.
+
+Upstream-Status: Pending [submitted to Axiado boot]
+Signed-off-by: Kuan-Jui Chiu <kchiu@axiado.com>
+---
+ CMakeLists.txt | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index c16d3e59..11f084f5 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -155,7 +155,7 @@ message(NOTICE "CMAKE_C_COMPILER = ${CMAKE_C_COMPILER}")
+ set(BOOT_ROOT ${CMAKE_SOURCE_DIR})
+ set(PBL_ROOT ${BOOT_ROOT}/pbl)
+ set(SBL_ROOT ${BOOT_ROOT}/sbl)
+-set(BOOT_BUILD_ROOT ${BOOT_ROOT}/build)
++set(BOOT_BUILD_ROOT ${CMAKE_CURRENT_BINARY_DIR})
+ set(PROJECT_LIB_DIR ${BOOT_BUILD_ROOT}/lib)
+ set(CONF_ROOT ${BOOT_ROOT}/conf/)
+ set(CONF_FILE "${CONF_ROOT}/${BOOT_MODE}_${CORE_NUM}.conf")
+@@ -192,15 +192,15 @@ execute_process(
+     ${KCONIFIG_COMMAND}
+     ${BOOT_ROOT}/Kconfig
+     ${BOOT_ROOT}/ci/scripts/auto_header.h
+-    ${CMAKE_CURRENT_BINARY_DIR}/kconfig/include/generated/autoconf.out
++    ${BOOT_BUILD_ROOT}/kconfig/include/generated/autoconf.out
+     ${BOOT_BUILD_ROOT}/include/generated/autoconf.h
+-    ${CMAKE_CURRENT_BINARY_DIR}/kconfig/include/generated/kconfig_list.out
++    ${BOOT_BUILD_ROOT}/kconfig/include/generated/kconfig_list.out
+     ${CONF_FILE}
+     WORKING_DIRECTORY ${BOOT_BUILD_ROOT}
+     RESULT_VARIABLE KCONFIG_RESULT
+ )
+ 
+-import_kconfig(CONFIG_ ${CMAKE_CURRENT_BINARY_DIR}/kconfig/include/generated/autoconf.out)
++import_kconfig(CONFIG_ ${BOOT_BUILD_ROOT}/kconfig/include/generated/autoconf.out)
+ 
+ # Add path to autoconf.h to the list of include directories
+ list(APPEND PBL_INCLUDES ${BOOT_BUILD_ROOT}/include/generated)
+-- 
+2.34.1
+

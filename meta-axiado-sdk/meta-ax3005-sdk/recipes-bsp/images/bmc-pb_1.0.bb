@@ -18,7 +18,7 @@ do_install:append() {
 
 do_deploy:append() {
 # image-bundle.bin is deployed by caliptra-sw recipe
-    install -m 0644 ${S}/ax3005/images/sbl.bin ${DEPLOYDIR}
+# sbl.bin is deployed by sbl recipe
     install -m 0644 ${S}/ax3005/images/secmc.img.ebin ${DEPLOYDIR}
 # sysmgr.bin is deployed by irot recipe
 # bl31.bin is deployed by truested-firmware-a recipe
