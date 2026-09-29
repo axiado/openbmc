@@ -1,6 +1,6 @@
 require recipes-bsp/u-boot/u-boot-axiado.inc
 
-SRCREV = "b7f093326e47d9b44600267df720026bb8a06acc"
+SRCREV = "18712c51f68656fd181e703b409734a3123e34ed"
 SRCBRANCH = "master"
 SRC_URI = "git://github.com/axiado/u-boot-ax3005;protocol=https;branch=${SRCBRANCH}"
 

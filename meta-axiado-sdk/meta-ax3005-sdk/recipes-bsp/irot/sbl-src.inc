@@ -1,4 +1,4 @@
-# BU2A-558
-SRCREV_sbl = "efbf761a0e8a68580cae2c09c7d0b612894dbbc6"
+# BU2A-559
+SRCREV_sbl = "80e9ddd9581abafabfd2bad40245487fe9bc5c75"
 SRCBRANCH_SBL = "release/release-u-0.2.0"
 SRC_URI_SBL = "git://bitbucket.org/ax-engg/boot.git;protocol=https;branch=${SRCBRANCH_SBL}"
