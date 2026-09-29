@@ -1,4 +1,4 @@
-SRCREV = "4497cbae86237274b7d1c0fe9149bf0deeb3f72d"
+SRCREV = "c0bffa4d9e9d3afea591ca9221e4573fe346a8c3"
 SRCBRANCH = "release/release-0.18.0"
 SRC_URI = "git://bitbucket.org/ax-engg/kernel-6.6.git;protocol=https;branch=${SRCBRANCH}"
 
