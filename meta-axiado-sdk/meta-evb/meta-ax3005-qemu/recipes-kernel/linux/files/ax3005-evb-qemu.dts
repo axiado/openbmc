@@ -35,7 +35,7 @@
 	};
 
 	/delete-node/ display-subsystem;
-	/delete-node/ mctp-mailbox;
+	/delete-node/ mctp-irot;
 
 	soc {
 		/delete-node/ mailbox0;
