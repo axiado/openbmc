@@ -1,0 +1,10 @@
+// SPDX-License-Identifier: GPL-2.0+
+/*
+ * DTS file for QEMU model of Axiado AX3005 SoC Evaluation board
+ */
+
+/dts-v1/;
+
+#include "ax3005-evb-qemu.dts"
+
+/delete-node/ &optee;
