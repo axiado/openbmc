@@ -5,7 +5,7 @@ LICENSE = "CLOSED"
 
 inherit deploy image_version
 
-DEPENDS += "u-boot virtual/kernel linux-yocto-fitimage bmc-pb caliptra-image-tool-native python3-build-native pldm"
+DEPENDS += "u-boot virtual/kernel linux-yocto-fitimage bmc-pb caliptra-image-tool-native python3-build-native python3-bitarray-native pldm"
 
 SRC_URI = "file://flash.json"
 
