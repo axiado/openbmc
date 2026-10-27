@@ -1,0 +1,59 @@
+Subject: Do not use beast http::field values removed in Boost 1.90
+
+http2_settings and content_transfer_encoding no longer exist in
+boost::beast::http::field; use the header names as strings instead.
+
+Upstream-Status: Inappropriate [build fix for Boost 1.90]
+---
+diff --git a/http/http_connection.hpp b/http/http_connection.hpp
+index fcda2bf5..f711f6fd 100644
+--- a/http/http_connection.hpp
++++ b/http/http_connection.hpp
+@@ -330,7 +330,7 @@ class Connection :
+ 
+         if (BMCWEB_HTTP2 && isH2c)
+         {
+-            std::string_view base64settings = req->req[field::http2_settings];
++            std::string_view base64settings = req->req["HTTP2-Settings"];
+             if (utility::base64Decode<true>(base64settings, http2settings))
+             {
+                 res.result(boost::beast::http::status::switching_protocols);
+diff --git a/redfish-core/include/utils/log_services_utils.hpp b/redfish-core/include/utils/log_services_utils.hpp
+index f0f230bb..08f60ed8 100644
+--- a/redfish-core/include/utils/log_services_utils.hpp
++++ b/redfish-core/include/utils/log_services_utils.hpp
+@@ -111,7 +111,7 @@ inline void downloadEntryCallback(
+             return;
+         }
+         asyncResp->res.addHeader(
+-            boost::beast::http::field::content_transfer_encoding, "Base64");
++            "Content-Transfer-Encoding", "Base64");
+         return;
+     }
+     if (!asyncResp->res.openFd(fd))
+diff --git a/redfish-core/lib/systems_logservices_postcodes.hpp b/redfish-core/lib/systems_logservices_postcodes.hpp
+index ecd52025..ddad369d 100644
+--- a/redfish-core/lib/systems_logservices_postcodes.hpp
++++ b/redfish-core/lib/systems_logservices_postcodes.hpp
+@@ -582,7 +582,7 @@ inline void handleSystemsLogServicesPostCodesEntriesEntryAdditionalDataGet(
+             asyncResp->res.addHeader(boost::beast::http::field::content_type,
+                                      "application/octet-stream");
+             asyncResp->res.addHeader(
+-                boost::beast::http::field::content_transfer_encoding, "Base64");
++                "Content-Transfer-Encoding", "Base64");
+             asyncResp->res.write(crow::utility::base64encode(strData));
+         },
+         "xyz.openbmc_project.State.Boot.PostCode0",
+diff --git a/redfish-core/lib/telemetry_service.hpp b/redfish-core/lib/telemetry_service.hpp
+index a5a70dcb..01c75cc4 100644
+--- a/redfish-core/lib/telemetry_service.hpp
++++ b/redfish-core/lib/telemetry_service.hpp
+@@ -544,7 +544,7 @@ inline void downloadEntryHandlerCallback(
+     }
+ 
+     asyncResp->res.addHeader(
+-        boost::beast::http::field::content_transfer_encoding, "Base64");
++        "Content-Transfer-Encoding", "Base64");
+ 
+     return;
+ }

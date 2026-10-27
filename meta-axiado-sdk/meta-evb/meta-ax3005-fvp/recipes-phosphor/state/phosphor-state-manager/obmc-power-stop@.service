@@ -1,0 +1,17 @@
+[Unit]
+Description=Start Power Off for Chassis%i
+Wants=obmc-power-stop@%i.target
+Before=obmc-power-stop@%i.target
+Wants=obmc-power-stop-pre@%i.target
+After=obmc-power-stop-pre@%i.target
+Conflicts=obmc-chassis-poweron@%i.target
+
+[Service]
+RemainAfterExit=yes
+EnvironmentFile=/etc/default/state_config.ini
+ExecStartPre=-/bin/sh -c 'busctl call au.com.codeconstruct.MCTP1 /au/com/codeconstruct/mctp1/networks/1/endpoints/"$HOST_EID" au.com.codeconstruct.MCTP.Endpoint1 Remove'
+ExecStart=/bin/sh -c 'gpioset $(gpiofind "$PWR_REQ")=0'
+SyslogIdentifier=obmc-power-stop
+
+[Install]
+WantedBy=obmc-chassis-poweroff@%i.target

@@ -1,0 +1,18 @@
+[Unit]
+Description=Wait for Power%i to turn off
+Before=obmc-power-off@%i.target
+Wants=obmc-power-stop@%i.target
+Before=obmc-power-stop@%i.target
+Wants=obmc-power-stop-pre@%i.target
+After=obmc-power-stop-pre@%i.target
+Conflicts=obmc-chassis-poweron@%i.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+EnvironmentFile=/etc/default/state_config.ini
+ExecStart=/bin/sh -c "/usr/sbin/host_check.sh 0"
+ExecStart=/bin/rm -f /run/openbmc/host@%i-request
+
+[Install]
+RequiredBy=obmc-host-stop@%i.target

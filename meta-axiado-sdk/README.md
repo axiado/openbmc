@@ -74,6 +74,7 @@ git clone https://github.com/axiado/openbmc.git
 Available machines:
 evk-axiado-github
 evk-ax3005-github
+ax3005-fvp-github
 ```
 
 - Ax3000 SoC

@@ -1,0 +1,211 @@
+From 9288fdd6c163baa0d52bd50f998c0ee0406fb55e Mon Sep 17 00:00:00 2001
+From: Ann Cheng <ann.cheng@arm.com>
+Date: Mon, 15 Sep 2025 14:19:59 +0800
+Subject: [PATCH] meta-evb: meta-evb-arm: Add Send Platform Error Record
+ support to SBMR IPMI
+
+Send Platform Error Record (NetFn 2Ch, Command 01h)
+This command is used to send the RAS CPER error record to the BMC.
+Request Data field
+----------------------------------
+1     Group extension defining body (AEh)
+2...n CPER Error record (Section Descriptor and Section)
+----------------------------------------------------
+Please see Appendix C.1.2 RAS IPMI message format, SBMR 2.1
+
+Upstream-Status: Pending
+
+Signed-off-by: Ann Cheng <Ann.Cheng@arm.com>
+Change-Id: I517ff7b520b7a08aff819c7dcb4fa3413cc3d4c9
+---
+ include/ipmid/api-types.hpp |   1 +
+ sbmrhandler.cpp             | 136 +++++++++++++++++++++++++++++++++++-
+ 2 files changed, 136 insertions(+), 1 deletion(-)
+
+diff --git a/include/ipmid/api-types.hpp b/include/ipmid/api-types.hpp
+index 43e0a84..02ecf77 100644
+--- a/include/ipmid/api-types.hpp
++++ b/include/ipmid/api-types.hpp
+@@ -346,6 +346,7 @@ constexpr Cmd cmdGetBootstrapAccoutCredential = 0x02;
+ #ifdef ARM_SBMR_SUPPORT
+ namespace sbmr
+ {
++constexpr Cmd cmdSendPlatformErrorRecord = 0x01;
+ constexpr Cmd cmdSendBootProgressCode = 0x02;
+ constexpr Cmd cmdGetBootProgressCode = 0x03;
+ } // namespace sbmr
+diff --git a/sbmrhandler.cpp b/sbmrhandler.cpp
+index 446311e..348ff59 100644
+--- a/sbmrhandler.cpp
++++ b/sbmrhandler.cpp
+@@ -3,6 +3,14 @@
+ #include <ipmid/utils.hpp>
+ #include <phosphor-logging/lg2.hpp>
+ 
++#include <fstream>
++#include <set>
++
++constexpr auto sbmrCperIntf = "xyz.openbmc_project.Dump.Create";
++constexpr auto sbmrCperRoot = "/xyz/openbmc_project/dump/";
++constexpr auto sbmrCperMatch = "faultlog";
++constexpr auto cperDescriptorSize = 72;
++
+ constexpr auto sbmrBootStateIntf = "xyz.openbmc_project.State.Boot.Raw";
+ constexpr auto sbmrHostStateIntf = "xyz.openbmc_project.State.Boot.Progress";
+ constexpr auto sbmrBootProgressCodeSize = 9;
+@@ -36,6 +44,8 @@ constexpr auto efiSwOsLoaderStart = 0x0180;
+ constexpr auto efiSwBsPcExitBootServices = 0x1910;
+ 
+ void registerNetfnSBMRFunctions() __attribute__((constructor));
++using faultLogEntryType =
++    std::map<std::string, std::variant<std::string, uint64_t>>;
+ 
+ namespace ipmi
+ {
+@@ -270,6 +280,122 @@ bool checkAllowedMediumType(uint8_t mediumType)
+     return false;
+ }
+ 
++bool saveCperToFile(std::vector<uint8_t>& data, std::string& fileName)
++{
++    // Save event data to file
++    std::filesystem::path dirName{"/var/cper"};
++    if (!std::filesystem::exists(dirName))
++    {
++        try
++        {
++            std::filesystem::create_directory(dirName);
++        }
++        catch (const std::filesystem::filesystem_error& e)
++        {
++            lg2::error("Failed to create /var/cper directory: {ERROR}", "ERROR",
++                       e.what());
++            return false;
++        }
++    }
++
++    fileName = dirName.string() + "/cper-XXXXXX";
++    auto fd = mkstemp(fileName.data());
++    if (fd < 0)
++    {
++        lg2::error("Failed to generate temp file, error {ERRORNO}", "ERRORNO",
++                   std::strerror(errno));
++        return false;
++    }
++    close(fd);
++
++    if (fileName.empty())
++    {
++        lg2::error("Failed to generate valid temp file name");
++        return false;
++    }
++
++    std::ofstream ofs;
++    ofs.exceptions(std::ofstream::failbit | std::ofstream::badbit |
++                   std::ofstream::eofbit);
++    try
++    {
++        ofs.open(fileName);
++        ofs.write(reinterpret_cast<char*>(data.data()), data.size());
++        ofs.close();
++    }
++    catch (const std::ofstream::failure& e)
++    {
++        lg2::error("Failed to save CPER to '{FILENAME}', error - {ERROR}.",
++                   "FILENAME", fileName, "ERROR", e.what());
++        std::filesystem::remove(fileName);
++        return false;
++    }
++    return true;
++}
++
++bool createCperDumpEntry(ipmi::Context::ptr& ctx, std::string& filePath)
++{
++    faultLogEntryType faultLogEntry;
++
++    ipmi::DbusObjectInfo sbmrCperRecordObject;
++
++    boost::system::error_code ec = ipmi::getDbusObject(
++        ctx, sbmrCperIntf, sbmrCperRoot, sbmrCperMatch, sbmrCperRecordObject);
++    if (ec)
++    {
++        lg2::error("Failed to get sbmrCperRecordObject: {ERROR}", "ERROR",
++                   ec.message());
++        return false;
++    }
++
++    lg2::debug("service = {SERVICE}", "SERVICE", sbmrCperRecordObject.second);
++    lg2::debug("ObjPath = {PATH}", "PATH", sbmrCperRecordObject.first);
++
++    faultLogEntry["Type"] = "CPER";
++    faultLogEntry["PrimaryLogId"] = filePath;
++    faultLogEntry["AdditionalTypeName"] = "CPER";
++
++    ec = ipmi::callDbusMethod(ctx, sbmrCperRecordObject.second.c_str(),
++                              sbmrCperRecordObject.first.c_str(), sbmrCperIntf,
++                              "CreateDump", faultLogEntry);
++    if (ec)
++    {
++        lg2::error("error in create CPER dump entry: {MSG}", "MSG",
++                   ec.message());
++        return false;
++    }
++
++    lg2::info("Successfully created CPER dump entry for file: {FILE}", "FILE",
++              filePath);
++
++    return true;
++}
++
++ipmi::RspType<uint8_t> sendPlatformErrorRecord(ipmi::Context::ptr ctx,
++                                               std::vector<uint8_t>& data)
++{
++    std::string filePath;
++
++    if (data.size() < cperDescriptorSize)
++    {
++        lg2::error("Error: CPER data is empty or too short, size: {SIZE}",
++                   "SIZE", data.size());
++        return ipmi::responseReqDataLenInvalid();
++    }
++
++    if (!saveCperToFile(data, filePath))
++    {
++        return ipmi::responseUnspecifiedError();
++    }
++
++    if (!createCperDumpEntry(ctx, filePath))
++    {
++        return ipmi::responseUnspecifiedError();
++    }
++
++    return ipmi::responseSuccess();
++}
++
+ ipmi::Cc sbmrFilterCommands(ipmi::message::Request::ptr request)
+ {
+     if (request->ctx->netFn != ipmi::netFnGroup ||
+@@ -287,7 +413,11 @@ ipmi::Cc sbmrFilterCommands(ipmi::message::Request::ptr request)
+         return ipmi::ccUnspecifiedError;
+     }
+ 
+-    if (request->ctx->cmd == ipmi::sbmr::cmdSendBootProgressCode &&
++    static const std::set<uint8_t> mediumCheckCommands = {
++        ipmi::sbmr::cmdSendBootProgressCode,
++        ipmi::sbmr::cmdSendPlatformErrorRecord};
++
++    if (mediumCheckCommands.count(request->ctx->cmd) &&
+         !checkAllowedMediumType(chInfo.mediumType))
+     {
+         lg2::error("Error - Medium interface not supported, medium={TYPE}",
+@@ -302,6 +432,10 @@ ipmi::Cc sbmrFilterCommands(ipmi::message::Request::ptr request)
+ 
+ void registerNetfnSBMRFunctions()
+ {
++    registerGroupHandler(ipmi::prioOpenBmcBase, ipmi::groupSBMR,
++                         ipmi::sbmr::cmdSendPlatformErrorRecord,
++                         ipmi::Privilege::Admin, ipmi::sendPlatformErrorRecord);
++
+     registerGroupHandler(ipmi::prioOpenBmcBase, ipmi::groupSBMR,
+                          ipmi::sbmr::cmdSendBootProgressCode,
+                          ipmi::Privilege::Admin, ipmi::sendBootProgressCode);

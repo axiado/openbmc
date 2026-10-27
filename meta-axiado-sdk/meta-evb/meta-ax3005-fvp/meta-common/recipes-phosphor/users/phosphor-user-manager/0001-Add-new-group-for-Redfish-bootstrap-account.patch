@@ -1,0 +1,48 @@
+From c4e51a317f98483ac0510a84ee68eae604104849 Mon Sep 17 00:00:00 2001
+From: John Chung <john.chung@arm.com>
+Date: Mon, 29 Jun 2026 19:47:52 -0500
+Subject: [PATCH] Add new group for Redfish bootstrap account
+
+New group for Redfish bootstrap account allows to update
+Redfish Bios Settings resources.
+
+Upstream-Status: Pending
+
+Signed-off-by: John Chung <john.chung@arm.com>
+---
+ user_mgr.cpp | 8 ++++++--
+ 1 file changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/user_mgr.cpp b/user_mgr.cpp
+index 9c0f909..02eeed6 100644
+--- a/user_mgr.cpp
++++ b/user_mgr.cpp
+@@ -57,6 +57,7 @@ static constexpr const char* passwdFileName = "/etc/passwd";
+ static constexpr size_t ipmiMaxUserNameLen = 16;
+ static constexpr size_t systemMaxUserNameLen = 100;
+ static constexpr const char* grpSsh = "ssh";
++static constexpr const char* grpRedfishHi = "redfishhi";
+ static constexpr int success = 0;
+ static constexpr int failure = -1;
+ static constexpr long secondsPerDay = 60 * 60 * 24;
+@@ -113,8 +114,8 @@ namespace
+ {
+ constexpr auto mfaConfPath = "/var/lib/usr_mgr.conf";
+ // The hardcoded groups in OpenBMC projects
+-constexpr std::array<const char*, 4> predefinedGroups = {
+-    "redfish", "ipmi", "ssh", "hostconsole"};
++constexpr std::array<const char*, 5> predefinedGroups = {
++    "redfish", "ipmi", "ssh", "hostconsole", "redfishhi"};
+ 
+ // These prefixes are for Dynamic Redfish authorization. See
+ // https://github.com/openbmc/docs/blob/master/designs/redfish-authorization.md
+@@ -436,6 +437,9 @@ void UserMgr::createUserImpl(const std::string& userName, UserCreateMap props)
+         passwordExpiration =
+             std::get<uint64_t>(props[UserProperty::PasswordExpiration]);
+ 
++    // Need to manually add redfishhi group
++    std::erase(groupNames, grpRedfishHi);
++
+     throwForInvalidPrivilege(priv);
+     throwForInvalidGroups(groupNames);
+     // All user management lock has to be based on /etc/shadow

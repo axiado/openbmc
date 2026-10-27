@@ -1,0 +1,2 @@
+DEPENDS:append = " inventory-cleanup"
+

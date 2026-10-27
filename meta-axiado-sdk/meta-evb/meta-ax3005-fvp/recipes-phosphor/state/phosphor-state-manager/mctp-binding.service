@@ -1,0 +1,10 @@
+[Unit]
+Description = MCTP Binding
+After=obmc-host-already-on@0.target
+BindTo=obmc-host-already-on@0.target
+
+[Service]
+Restart=always
+RestartSec=10s
+RemainAfterExit=true
+ExecStart=/usr/sbin/mctp-binding.sh

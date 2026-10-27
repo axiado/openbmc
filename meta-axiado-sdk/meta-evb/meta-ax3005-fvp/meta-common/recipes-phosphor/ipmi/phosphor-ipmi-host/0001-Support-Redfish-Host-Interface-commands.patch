@@ -1,0 +1,263 @@
+From 14c9cd768665a07bd33b221e8fc938c937c3f0b3 Mon Sep 17 00:00:00 2001
+From: John Chung <john.chung@arm.com>
+Date: Thu, 13 Mar 2025 17:17:16 -0500
+Subject: [PATCH] Support Redfish Host Interface commands
+
+Group 0x52, Cmd 1 - cmdGetCertificateFingerprint
+Group 0x52, Cmd 2 - cmdGetBootstrapAccoutCredential
+
+Upstream-Status: Pending
+
+Signed-off-by: John Chung <john.chung@arm.com>
+Change-Id: I0f85185d3c54927d9d2a3c75c025bd0c2483af20
+---
+ include/ipmid/api-types.hpp |   7 ++
+ meson.build                 |   4 +-
+ redfishhandler.cpp          | 165 ++++++++++++++++++++++++++++++++++++
+ redfishhandler.hpp          |  11 +++
+ 4 files changed, 186 insertions(+), 1 deletion(-)
+ create mode 100644 redfishhandler.cpp
+ create mode 100644 redfishhandler.hpp
+
+diff --git a/include/ipmid/api-types.hpp b/include/ipmid/api-types.hpp
+index 52c68ee..f4c657f 100644
+--- a/include/ipmid/api-types.hpp
++++ b/include/ipmid/api-types.hpp
+@@ -31,6 +31,7 @@ constexpr Group groupPICMG = 0x00;
+ constexpr Group groupDMTG = 0x01;
+ constexpr Group groupSSI = 0x02;
+ constexpr Group groupVSO = 0x03;
++constexpr Group groupRedfishHI = 0x52;
+ #ifdef ARM_SBMR_SUPPORT
+ constexpr Group groupSBMR = 0xAE;
+ #endif
+@@ -330,6 +331,12 @@ constexpr Cmd cmdSetDcmiConfigParameters = 0x12;
+ constexpr Cmd cmdGetDcmiConfigParameters = 0x13;
+ } // namespace dcmi
+ 
++namespace redfish
++{
++constexpr Cmd cmdGetCertificateFingerprint = 0x01;
++constexpr Cmd cmdGetBootstrapAccoutCredential = 0x02;
++} // namespace redfish
++
+ #ifdef ARM_SBMR_SUPPORT
+ namespace sbmr
+ {
+diff --git a/meson.build b/meson.build
+index 93175d9..b91bec2 100644
+--- a/meson.build
++++ b/meson.build
+@@ -255,6 +255,7 @@ ipmid_pre = [
+     crypto,
+     ipmid_dep,
+     channellayer_dep,
++    userlayer_dep,
+ ]
+ 
+ transportoem_src = []
+@@ -298,6 +299,7 @@ libipmi20_src = [
+     'read_fru_data.cpp',
+     'sensordatahandler.cpp',
+     'user_channel/channelcommands.cpp',
++    'redfishhandler.cpp',
+     generated_src,
+     transportoem_src,
+     storage_cmds_src,
+@@ -309,7 +311,7 @@ libipmi20_src = [
+ ipmi20_lib = library(
+     'ipmi20',
+     libipmi20_src,
+-    dependencies: [ipmid_pre, nlohmann_json_dep],
++    dependencies: [ipmid_pre, nlohmann_json_dep, userlayer_dep],
+     include_directories: root_inc,
+     install: true,
+     install_dir: get_option('libdir') / 'ipmid-providers',
+diff --git a/redfishhandler.cpp b/redfishhandler.cpp
+new file mode 100644
+index 0000000..9dc3c04
+--- /dev/null
++++ b/redfishhandler.cpp
+@@ -0,0 +1,165 @@
++#include "redfishhandler.hpp"
++
++#include <openssl/pem.h>
++#include <openssl/x509.h>
++
++#include <ipmid/api.hpp>
++#include <ipmid/types.hpp>
++#include <ipmid/utils.hpp>
++#include <phosphor-logging/lg2.hpp>
++#include <user_channel/user_layer.hpp>
++#include <user_channel/user_mgmt.hpp>
++
++#include <random>
++
++void register_netfn_redfish_functions() __attribute__((constructor));
++
++namespace ipmi
++{
++
++ipmi::RspType<std::vector<uint8_t>> ipmiGetBootstrapAccount(
++    ipmi::Context::ptr ctx, uint8_t bootstrapControl)
++{
++    ipmi::ChannelInfo chInfo;
++    std::string userName;
++    std::string password;
++    char buffer[bootstrapAccLen] = {};
++    std::vector<uint8_t> dataOut;
++
++    if (ipmi::getChannelInfo(ctx->channel, chInfo) != ipmi::ccSuccess)
++    {
++        lg2::error("Failed to get Channel Info, channel={CHANNEL}", "CHANNEL",
++                   ctx->channel);
++        return ipmi::responseUnspecifiedError();
++    }
++
++    // TODO : Handle Bootstrap Control
++    (void)bootstrapControl;
++
++    // TODO : Generate random username and password
++    userName = "redfish_hi";
++    password = "0penBmc@RFHI";
++
++    // Workaround: Create user account by async call due to FVP timeout.
++    lg2::info("Create bootstrap account : {ACCOUNT}", "ACCOUNT", userName);
++    std::shared_ptr<sdbusplus::asio::connection> dbus = getSdBus();
++    auto method = dbus->new_method_call(userMgrService, userMgrObjBasePath,
++                                        userMgrInterface, createUserMethod);
++    std::vector<std::string> userGroup = {"redfish", "redfishhi", "ipmi"};
++    method.append(userName, userGroup, "priv-admin", true);
++    dbus->async_send(method, [dbus, userName,
++                              password](boost::system::error_code ec,
++                                        sdbusplus::message_t& reply) {
++        if (ec || reply.is_method_error())
++        {
++            lg2::error("User name may exists.");
++        }
++
++        /* Setup Password */
++        lg2::info("Set bootstrap account password : {PASSWD}", "PASSWD",
++                  password);
++        SecureString secureString(password.c_str());
++        Cc rc = ipmi::ipmiSetSpecialUserPassword(userName, secureString);
++        if (rc != ipmi::ccSuccess)
++        {
++            lg2::error(
++                "Failed to set User name password {PASSWORD} error code {ERROR}.",
++                "PASSWORD", password, "ERROR", rc);
++            return;
++        }
++
++        /* Manually add Redfish HI group */
++        lg2::info("Set bootstrap account to Redfish Host Interface group");
++        std::vector<std::string> userGroup = {"redfish", "redfishhi", "ipmi"};
++        std::string userPath(userObjBasePath);
++        userPath += "/" + userName;
++        auto method =
++            dbus->new_method_call(userMgrService, userPath.c_str(),
++                                  dBusPropertiesInterface, setPropertiesMethod);
++        method.append(usersInterface, userGrpProperty,
++                      std::variant<std::vector<std::string>>(userGroup));
++        dbus->call(method);
++
++        return;
++    });
++
++    /* Respond data */
++    memcpy(buffer, userName.c_str(), userName.length());
++    memcpy(buffer + maxPasswordSize, password.c_str(), password.length());
++    dataOut.assign(buffer, buffer + bootstrapAccLen);
++
++    return ipmi::responseSuccess(dataOut);
++}
++
++ipmi::RspType<std::vector<uint8_t>> ipmiGetRedfishCertificateFingerprint(
++    ipmi::Context::ptr ctx, uint8_t certNum)
++{
++    ipmi::ChannelInfo chInfo;
++    const EVP_MD* fdig = EVP_sha256();
++    unsigned int n;
++
++    if (ipmi::getChannelInfo(ctx->channel, chInfo) != ipmi::ccSuccess)
++    {
++        lg2::error("Failed to get Channel Info, channel={CHANNEL}", "CHANNEL",
++                   ctx->channel);
++        return ipmi::responseUnspecifiedError();
++    }
++
++    if (certNum != 1)
++    {
++        lg2::error("Invalid certificate number - {NUMBER}", "NUMBER", certNum);
++        return ipmi::response(ipmiInvalidCertificateNumber);
++    }
++
++    BIO* cert;
++    X509* x = NULL;
++    cert = BIO_new_file(defaultCertPath, "rb");
++    if (cert == NULL)
++    {
++        lg2::error("Unable to open certificate - {CERT}", "CERT",
++                   defaultCertPath);
++        return ipmi::response(ipmi::ccResponseError);
++    }
++
++    x = PEM_read_bio_X509_AUX(cert, NULL, NULL, NULL);
++    if (x == NULL)
++    {
++        BIO_free(cert);
++        lg2::error("Unable to load certificate from X509");
++        return ipmi::response(ipmi::ccResponseError);
++    }
++
++    std::vector<uint8_t> fingerPrintData(EVP_MAX_MD_SIZE);
++    if (!X509_digest(x, fdig, fingerPrintData.data(), &n))
++    {
++        X509_free(x);
++        BIO_free(cert);
++        lg2::error("X509 Out of memory");
++        return ipmi::response(ipmi::ccResponseError);
++    }
++
++    X509_free(x);
++    BIO_free(cert);
++
++    std::vector<uint8_t> respBuf;
++
++    respBuf.push_back(1); // Default 01h: SHA-256.
++    respBuf.insert(respBuf.end(), fingerPrintData.begin(),
++                   fingerPrintData.begin() + n);
++
++    return ipmi::responseSuccess(respBuf);
++}
++
++} // namespace ipmi
++
++void register_netfn_redfish_functions()
++{
++    registerGroupHandler(ipmi::prioOpenBmcBase, ipmi::groupRedfishHI,
++                         ipmi::redfish::cmdGetBootstrapAccoutCredential,
++                         ipmi::Privilege::User, ipmi::ipmiGetBootstrapAccount);
++
++    registerGroupHandler(ipmi::prioOpenBmcBase, ipmi::groupRedfishHI,
++                         ipmi::redfish::cmdGetCertificateFingerprint,
++                         ipmi::Privilege::User,
++                         ipmi::ipmiGetRedfishCertificateFingerprint);
++}
+diff --git a/redfishhandler.hpp b/redfishhandler.hpp
+new file mode 100644
+index 0000000..2462e75
+--- /dev/null
++++ b/redfishhandler.hpp
+@@ -0,0 +1,11 @@
++#include <cstdint>
++
++#pragma once
++
++constexpr uint8_t bootstrapAccLen = 32;
++constexpr uint8_t maxPasswordSize = 16;
++
++constexpr uint8_t ipmiInvalidCertificateNumber = 0xCB;
++
++// Cert Paths
++constexpr auto defaultCertPath = "/etc/ssl/certs/https/server.pem";

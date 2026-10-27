@@ -1,0 +1,18 @@
+[Unit]
+Description=Start Power On for Chassis%i
+Wants=obmc-power-start@%i.target
+Before=obmc-power-start@%i.target
+Wants=obmc-power-start-pre@%i.target
+After=obmc-power-start-pre@%i.target
+Conflicts=obmc-chassis-poweroff@%i.target
+ConditionPathExists=!/run/openbmc/chassis@%i-on
+
+[Service]
+RemainAfterExit=yes
+Type=oneshot
+EnvironmentFile=/etc/default/state_config.ini
+ExecStart=/bin/sh -c 'gpioset $(gpiofind "$PWR_REQ")=1'
+SyslogIdentifier=phosphor-power-start
+
+[Install]
+WantedBy=obmc-chassis-poweron@%i.target

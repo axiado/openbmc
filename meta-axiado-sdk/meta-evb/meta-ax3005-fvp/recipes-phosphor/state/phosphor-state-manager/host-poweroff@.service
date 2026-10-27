@@ -1,0 +1,16 @@
+[Unit]
+Description=power off host:%i
+Wants=obmc-host-stop-pre@%i.target
+Before=obmc-host-stop-pre@%i.target
+Conflicts=obmc-host-startmin@%i.target
+ConditionPathExists=!/run/openbmc/host@%i-request
+
+[Service]
+Restart=no
+Type=oneshot
+RemainAfterExit=yes
+EnvironmentFile=/etc/default/state_config.ini
+ExecStart=/bin/sh -c 'gpioset $(gpiofind "$PWR_REQ")=0'
+
+[Install]
+WantedBy=obmc-host-shutdown@%i.target

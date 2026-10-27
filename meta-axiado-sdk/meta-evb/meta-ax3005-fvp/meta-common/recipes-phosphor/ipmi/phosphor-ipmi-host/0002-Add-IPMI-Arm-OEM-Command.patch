@@ -1,0 +1,175 @@
+From 14d8f9926a47e9b2cc262351eef06e2b2b49454d Mon Sep 17 00:00:00 2001
+From: John Chung <john.chung@arm.com>
+Date: Thu, 13 Mar 2025 17:18:18 -0500
+Subject: [PATCH] Add IPMI Arm OEM Command
+
+Add IPMI Arm OEM command for getting Redfish service
+port number and UUID.
+
+OEM NetFn 0x30 with below commands
+
+Command - cmdGetRedfishUuid = 0x1;
+Command - cmdGetRedfishPortNumber = 0x2;
+
+Upstream-Status: Pending
+
+Signed-off-by: John Chung <john.chung@arm.com>
+Change-Id: Ibe94b7498e9613a1e8241007bcd38a7d2f589187
+---
+ armoemhandler.cpp           | 116 ++++++++++++++++++++++++++++++++++++
+ include/ipmid/api-types.hpp |   6 ++
+ meson.build                 |   1 +
+ 3 files changed, 123 insertions(+)
+ create mode 100644 armoemhandler.cpp
+
+diff --git a/armoemhandler.cpp b/armoemhandler.cpp
+new file mode 100644
+index 0000000..51cab00
+--- /dev/null
++++ b/armoemhandler.cpp
+@@ -0,0 +1,116 @@
++#include "redfishhandler.hpp"
++
++#include <ipmid/api.hpp>
++#include <ipmid/types.hpp>
++#include <ipmid/utils.hpp>
++#include <nlohmann/json.hpp>
++#include <phosphor-logging/lg2.hpp>
++
++#include <fstream>
++
++void register_netfn_arm_functions() __attribute__((constructor));
++
++namespace ipmi
++{
++
++std::string persistentDataFile = "/home/root/bmcweb_persistent_data.json";
++
++bool uuidStringToBytes(const std::string& uuid, std::vector<uint8_t>& uuidBytes)
++{
++    // Remove hyphens from the UUID string.
++    std::string hexString;
++    for (char c : uuid)
++    {
++        if (c != '-')
++        {
++            hexString.push_back(c);
++        }
++    }
++
++    // Validate that the cleaned string has the correct length (32 hex digits
++    // for 16 bytes)
++    if (hexString.size() != 32)
++    {
++        lg2::error("Failed to parse UUID string");
++        return false;
++    }
++
++    std::vector<unsigned char> bytes;
++    bytes.reserve(16);
++
++    // Convert every two hex digits into a byte.
++    for (size_t i = 0; i < hexString.size(); i += 2)
++    {
++        std::string byteString = hexString.substr(i, 2);
++        unsigned char byte =
++            static_cast<unsigned char>(std::stoi(byteString, nullptr, 16));
++        uuidBytes.push_back(byte);
++    }
++
++    return true;
++}
++
++ipmi::RspType<std::vector<uint8_t>> ipmiGetRedfishServicePort(
++    [[maybe_unused]] ipmi::Context::ptr ctx)
++{
++    int redfishPort = 443;
++    std::vector<uint8_t> dataOut;
++
++    dataOut.push_back(redfishPort >> 8 & 0xff);
++    dataOut.push_back(redfishPort & 0xff);
++
++    return ipmi::responseSuccess(dataOut);
++}
++
++ipmi::RspType<std::vector<uint8_t>> ipmiGetRedfishServiceUuid(
++    [[maybe_unused]] ipmi::Context::ptr ctx)
++{
++    std::ifstream persistentDataFilePath(persistentDataFile.c_str());
++    std::string uuidString;
++
++    if (!persistentDataFilePath.is_open())
++    {
++        lg2::error("Error opening persistent data - {FILE}", "FILE",
++                   persistentDataFile);
++        return ipmi::responseUnspecifiedError();
++    }
++
++    auto data = nlohmann::json::parse(persistentDataFilePath, nullptr, false);
++    if (data.is_discarded())
++    {
++        lg2::error("Error parsing persistent data - {FILE}", "FILE",
++                   persistentDataFile);
++        return ipmi::responseUnspecifiedError();
++    }
++
++    auto it = data.find("system_uuid");
++    if (it == data.end())
++    {
++        lg2::error("Error parsing persistent data system_uuid property");
++        return ipmi::responseUnspecifiedError();
++    }
++
++    uuidString = it->get<std::string>();
++
++    std::vector<uint8_t> uuidBytes;
++    if (!uuidStringToBytes(uuidString, uuidBytes))
++    {
++        lg2::error("Error converting UUID bytes");
++        return ipmi::responseUnspecifiedError();
++    }
++
++    return ipmi::responseSuccess(uuidBytes);
++}
++
++} // namespace ipmi
++
++void register_netfn_arm_functions()
++{
++    registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnOemOne,
++                    ipmi::arm::cmdGetRedfishPortNumber, ipmi::Privilege::User,
++                    ipmi::ipmiGetRedfishServicePort);
++
++    registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnOemOne,
++                    ipmi::arm::cmdGetRedfishUuid, ipmi::Privilege::User,
++                    ipmi::ipmiGetRedfishServiceUuid);
++}
+diff --git a/include/ipmid/api-types.hpp b/include/ipmid/api-types.hpp
+index f4c657f..43e0a84 100644
+--- a/include/ipmid/api-types.hpp
++++ b/include/ipmid/api-types.hpp
+@@ -85,6 +85,12 @@ using Cmd = uint8_t;
+ // ipmi function return the status code
+ using Cc = uint8_t;
+ 
++namespace arm
++{
++constexpr Cmd cmdGetRedfishUuid = 0x1;
++constexpr Cmd cmdGetRedfishPortNumber = 0x2;
++} // namespace arm
++
+ // IPMI 2.0 and DCMI 1.5 standard commands, namespaced by NetFn
+ // OEM and non-standard commands should be defined where they are used
+ namespace app
+diff --git a/meson.build b/meson.build
+index b91bec2..f76b1bd 100644
+--- a/meson.build
++++ b/meson.build
+@@ -300,6 +300,7 @@ libipmi20_src = [
+     'sensordatahandler.cpp',
+     'user_channel/channelcommands.cpp',
+     'redfishhandler.cpp',
++    'armoemhandler.cpp',
+     generated_src,
+     transportoem_src,
+     storage_cmds_src,

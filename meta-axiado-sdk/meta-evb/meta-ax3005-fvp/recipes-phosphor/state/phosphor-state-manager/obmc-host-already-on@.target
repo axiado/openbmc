@@ -1,0 +1,5 @@
+[Unit]
+Description=Host %i already on target
+After=phosphor-wait-power-on@%i.service
+Conflicts=obmc-chassis-poweroff@%i.target
+Conflicts=obmc-host-quiesce@%i.target
