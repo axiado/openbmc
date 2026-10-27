@@ -5,6 +5,8 @@
 
 /dts-v1/;
 
+#include <dt-bindings/gpio/gpio.h>
+
 #include "ax3005_evk.dts"
 
 / {
@@ -20,7 +22,77 @@
 			nvidia,channel-type = "management";
 			nvidia,channel-name = "AXIADO_AX3005_LSTP_BR";
 		};
+
+		channel@1 {
+			reg = <1>;
+			nvidia,channel-type = "gpio";
+			nvidia,channel-name = "GPIO";
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			/* HV-3, J39, gpio4 offset 0 == global line 128, host view: gpio output */
+			pin@0 {
+				reg = <0>;
+				label = "host_pgood_ok";
+				gpios = <&gpio4 0 GPIO_ACTIVE_HIGH>;
+				nvidia,allow-direction-control;
+				nvidia,allow-set-irq;
+				nvidia,drive = "push-pull";
+			};
+
+			/* HV-3, J39, gpio4 offset 1 == global line 129, host view: gpio input */
+			pin@1 {
+				reg = <1>;
+				label = "host_pwr_req";
+				gpios = <&gpio4 1 GPIO_ACTIVE_HIGH>;
+				nvidia,allow-set-irq;
+				nvidia,bias = "pull-up";
+			};
+		};
+
+		channel@2 {
+			reg = <2>;
+			nvidia,channel-type = "virtual-uart";
+			nvidia,channel-name = "VUART1";
+			current-speed = <115200>;
+			nvidia,data-bits = <8>;
+			nvidia,stop-bits = <1>;
+			nvidia,parity = "none";
+			nvidia,flow-control = "none";
+		};
+
+		channel@3 {
+			reg = <3>;
+			nvidia,channel-type = "virtual-uart";
+			nvidia,channel-name = "VUART2";
+			current-speed = <115200>;
+			nvidia,data-bits = <8>;
+			nvidia,stop-bits = <1>;
+			nvidia,parity = "none";
+			nvidia,flow-control = "none";
+		};
+
+		channel@4 {
+			reg = <4>;
+			nvidia,channel-type = "virtual-uart";
+			nvidia,channel-name = "VUART3";
+			current-speed = <115200>;
+			nvidia,data-bits = <8>;
+			nvidia,stop-bits = <1>;
+			nvidia,parity = "none";
+			nvidia,flow-control = "none";
+		};
 	};
+};
+
+&gpio4 {
+	compatible = "cdns,gpio-r1p02";
+
+	gpio-line-names =
+	/*128-135*/       "host_pgood_ok","host_pwr_req","","","","","","",
+	/*136-143*/       "","","","","","","","",
+	/*144-151*/       "","","","","","","","",
+	/*152-159*/       "pwr_req","pgood_ok","","","","","","";
 };
 
 &usb2_0 {

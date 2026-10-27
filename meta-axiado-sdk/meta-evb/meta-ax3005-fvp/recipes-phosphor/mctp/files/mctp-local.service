@@ -1,13 +1,13 @@
 [Unit]
-Description=MCTP configuration for serial ttyS0
+Description=MCTP configuration for serial ttyVUART1
 After=mctpd.service
 Before=pldmd.service
 BindTo=mctpd.service
 
 [Service]
 Type=simple
-ExecStartPre=stty -F /dev/ttyS0 115200 litout -crtscts -ixon -echo raw
-ExecStart=mctp link serial /dev/ttyS0
+ExecStartPre=stty -F /dev/ttyVUART1 115200 litout -crtscts -ixon -echo raw
+ExecStart=mctp link serial /dev/ttyVUART1
 ExecStartPost=sleep 3
 ExecStartPost=mctp link set mctpserial0 up
 ExecStartPost=mctp addr add 8 dev mctpserial0
