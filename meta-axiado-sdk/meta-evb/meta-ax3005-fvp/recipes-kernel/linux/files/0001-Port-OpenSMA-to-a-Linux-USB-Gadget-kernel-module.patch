@@ -1,0 +1,4729 @@
+From 58c3451185e3209b77d2af347c4be02955156d25 Mon Sep 17 00:00:00 2001
+From: Louis Liao <lliao@axiado.com>
+Date: Mon, 26 Oct 2026 20:05:42 -0700
+Subject: [PATCH] Port OpenSMA to a Linux USB Gadget kernel module.
+
+The LSTP gadget function lives under misc/ but does not need host support,
+so descend into it explicitly rather than relying on CONFIG_USB.
+
+Lives under misc/ but is a gadget function, so it must not be gated on
+host side USB support the way drivers/usb/misc/Kconfig is.
+
+Upstream-Status: Pending
+
+Signed-off-by: Louis Liao <lliao@axiado.com>
+---
+ drivers/usb/Kconfig                       |   2 +
+ drivers/usb/Makefile                      |   1 +
+ drivers/usb/misc/lstp_bridge/Kconfig      |  29 +
+ drivers/usb/misc/lstp_bridge/Makefile     |   9 +
+ drivers/usb/misc/lstp_bridge/f_lstp.c     | 742 ++++++++++++++++
+ drivers/usb/misc/lstp_bridge/lstp-core.c  | 586 +++++++++++++
+ drivers/usb/misc/lstp_bridge/lstp-gpio.c  | 728 ++++++++++++++++
+ drivers/usb/misc/lstp_bridge/lstp-i2c.c   | 330 ++++++++
+ drivers/usb/misc/lstp_bridge/lstp-mgmt.c  | 188 +++++
+ drivers/usb/misc/lstp_bridge/lstp-spi.c   | 527 ++++++++++++
+ drivers/usb/misc/lstp_bridge/lstp-vuart.c | 982 ++++++++++++++++++++++
+ drivers/usb/misc/lstp_bridge/lstp.h       | 466 ++++++++++
+ include/uapi/linux/serial_core.h          |   3 +
+ 13 files changed, 4593 insertions(+)
+ create mode 100644 drivers/usb/misc/lstp_bridge/Kconfig
+ create mode 100644 drivers/usb/misc/lstp_bridge/Makefile
+ create mode 100644 drivers/usb/misc/lstp_bridge/f_lstp.c
+ create mode 100644 drivers/usb/misc/lstp_bridge/lstp-core.c
+ create mode 100644 drivers/usb/misc/lstp_bridge/lstp-gpio.c
+ create mode 100644 drivers/usb/misc/lstp_bridge/lstp-i2c.c
+ create mode 100644 drivers/usb/misc/lstp_bridge/lstp-mgmt.c
+ create mode 100644 drivers/usb/misc/lstp_bridge/lstp-spi.c
+ create mode 100644 drivers/usb/misc/lstp_bridge/lstp-vuart.c
+ create mode 100644 drivers/usb/misc/lstp_bridge/lstp.h
+
+diff --git a/drivers/usb/Kconfig b/drivers/usb/Kconfig
+index abf8c6cdea9e..775a0bd32cdc 100644
+--- a/drivers/usb/Kconfig
++++ b/drivers/usb/Kconfig
+@@ -155,6 +155,8 @@ source "drivers/usb/phy/Kconfig"
+ 
+ source "drivers/usb/gadget/Kconfig"
+ 
++source "drivers/usb/misc/lstp_bridge/Kconfig"
++
+ source "drivers/usb/typec/Kconfig"
+ 
+ source "drivers/usb/roles/Kconfig"
+diff --git a/drivers/usb/Makefile b/drivers/usb/Makefile
+index 949eca0adebe..d5c5f729c44d 100644
+--- a/drivers/usb/Makefile
++++ b/drivers/usb/Makefile
+@@ -53,6 +53,7 @@ obj-$(CONFIG_USB_MICROTEK)	+= image/
+ obj-$(CONFIG_USB_SERIAL)	+= serial/
+ 
+ obj-$(CONFIG_USB)		+= misc/
++obj-$(CONFIG_USB_LSTP_BRIDGE)	+= misc/lstp_bridge/
+ obj-$(CONFIG_EARLY_PRINTK_USB)	+= early/
+ 
+ obj-$(CONFIG_USB_ATM)		+= atm/
+diff --git a/drivers/usb/misc/lstp_bridge/Kconfig b/drivers/usb/misc/lstp_bridge/Kconfig
+new file mode 100644
+index 000000000000..5dcf2a8da2c0
+--- /dev/null
++++ b/drivers/usb/misc/lstp_bridge/Kconfig
+@@ -0,0 +1,29 @@
++# SPDX-License-Identifier: GPL-2.0
++config USB_LSTP_BRIDGE
++	tristate "NVIDIA LSTP Bridge vendor specific USB gadget function"
++	depends on USB_GADGET
++	depends on OF
++	depends on I2C && GPIOLIB && SPI
++	depends on SERIAL_DEV_BUS
++	depends on SERIAL_CORE
++	help
++	  LSTP is the vendor specific USB protocol the NVIDIA OpenSMA server
++	  management adapter firmware uses to tunnel low speed buses to a USB
++	  host.  This driver implements the device side of that protocol as a
++	  USB gadget function, so a Linux machine such as a BMC can serve its
++	  own I2C adapters, GPIO lines, SPI devices and UARTs to an LSTP host.
++
++	  UART channels are driven through the serial device bus, so
++	  SERIAL_DEV_CTRL_TTYPORT is needed for them to reach a normal serial
++	  driver.  A "virtual-uart" channel needs no controller at all: it
++	  registers a serial driver of its own and appears locally as
++	  /dev/ttyVUARTn, so the host talks to software on this machine
++	  instead of to a wire.
++
++	  Once the module is loaded the function is available to configfs as
++	  "lstp", for example:
++
++	    mkdir /sys/kernel/config/usb_gadget/g1/functions/lstp.0
++
++	  To compile this driver as a module, choose M here: the module will
++	  be called usb-lstp.
+diff --git a/drivers/usb/misc/lstp_bridge/Makefile b/drivers/usb/misc/lstp_bridge/Makefile
+new file mode 100644
+index 000000000000..9679a1b9d836
+--- /dev/null
++++ b/drivers/usb/misc/lstp_bridge/Makefile
+@@ -0,0 +1,9 @@
++# SPDX-License-Identifier: GPL-2.0
++#
++# NVIDIA LSTP Bridge vendor specific USB gadget function
++#
++obj-$(CONFIG_USB_LSTP_BRIDGE)	+= usb-lstp.o
++
++usb-lstp-y			:= lstp-core.o f_lstp.o lstp-mgmt.o \
++				   lstp-i2c.o lstp-gpio.o lstp-spi.o \
++				   lstp-vuart.o
+diff --git a/drivers/usb/misc/lstp_bridge/f_lstp.c b/drivers/usb/misc/lstp_bridge/f_lstp.c
+new file mode 100644
+index 000000000000..698e944df91f
+--- /dev/null
++++ b/drivers/usb/misc/lstp_bridge/f_lstp.c
+@@ -0,0 +1,742 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * f_lstp.c - vendor specific USB gadget function carrying LSTP.
++ *
++ * The interface descriptor deliberately mirrors the one published by the
++ * OpenSMA firmware so that existing LSTP hosts bind without changes:
++ * class 0xff, subclass 0x3f, protocol 0x01 with one bulk IN and one bulk
++ * OUT endpoint.  Exactly one LSTP message is carried per bulk transfer.
++ *
++ * Copyright (c) 2026 Axiado Corporation
++ */
++
++#include <linux/device.h>
++#include <linux/err.h>
++#include <linux/module.h>
++#include <linux/slab.h>
++#include <linux/usb/composite.h>
++#include <linux/usb/func_utils.h>
++#include <linux/workqueue.h>
++
++#include "lstp.h"
++
++#define LSTP_INTF_CLASS		0xff
++#define LSTP_INTF_SUBCLASS	0x3f
++#define LSTP_INTF_PROTOCOL	0x01
++
++#define LSTP_RX_REQS		4
++#define LSTP_TX_REQS		4
++/* How long a producer waits for a free IN request before giving up. */
++#define LSTP_TX_WAIT_MS		500
++
++struct f_lstp;
++
++struct f_lstp_rx {
++	struct work_struct work;
++	struct f_lstp *fn;
++	struct usb_request *req;
++};
++
++struct f_lstp_tx {
++	struct list_head list;
++	struct f_lstp *fn;
++	struct usb_request *req;
++};
++
++struct f_lstp {
++	struct usb_function func;
++	struct lstp_dev *dev;
++
++	struct usb_ep *in_ep;
++	struct usb_ep *out_ep;
++
++	struct workqueue_struct *wq;
++
++	struct f_lstp_rx rx[LSTP_RX_REQS];
++	struct f_lstp_tx tx[LSTP_TX_REQS];
++
++	spinlock_t tx_lock;	/* guards tx_free */
++	struct list_head tx_free;
++	wait_queue_head_t tx_wait;
++
++	bool online;
++};
++
++struct f_lstp_opts {
++	struct usb_function_instance func_inst;
++	struct mutex lock;	/* guards refcnt */
++	int refcnt;
++	struct lstp_dev *dev;
++};
++
++static inline struct f_lstp *func_to_lstp(struct usb_function *f)
++{
++	return container_of(f, struct f_lstp, func);
++}
++
++/* ------------------------------------------------------------------ */
++/* Descriptors								*/
++/* ------------------------------------------------------------------ */
++
++static struct usb_interface_descriptor lstp_intf_desc = {
++	.bLength		= sizeof(lstp_intf_desc),
++	.bDescriptorType	= USB_DT_INTERFACE,
++	.bNumEndpoints		= 2,
++	.bInterfaceClass	= LSTP_INTF_CLASS,
++	.bInterfaceSubClass	= LSTP_INTF_SUBCLASS,
++	.bInterfaceProtocol	= LSTP_INTF_PROTOCOL,
++	/* .iInterface set at bind time */
++};
++
++static struct usb_endpoint_descriptor fs_lstp_in_desc = {
++	.bLength		= USB_DT_ENDPOINT_SIZE,
++	.bDescriptorType	= USB_DT_ENDPOINT,
++	.bEndpointAddress	= USB_DIR_IN,
++	.bmAttributes		= USB_ENDPOINT_XFER_BULK,
++	.wMaxPacketSize		= cpu_to_le16(64),
++};
++
++static struct usb_endpoint_descriptor fs_lstp_out_desc = {
++	.bLength		= USB_DT_ENDPOINT_SIZE,
++	.bDescriptorType	= USB_DT_ENDPOINT,
++	.bEndpointAddress	= USB_DIR_OUT,
++	.bmAttributes		= USB_ENDPOINT_XFER_BULK,
++	.wMaxPacketSize		= cpu_to_le16(64),
++};
++
++static struct usb_descriptor_header *fs_lstp_descs[] = {
++	(struct usb_descriptor_header *)&lstp_intf_desc,
++	(struct usb_descriptor_header *)&fs_lstp_in_desc,
++	(struct usb_descriptor_header *)&fs_lstp_out_desc,
++	NULL,
++};
++
++static struct usb_endpoint_descriptor hs_lstp_in_desc = {
++	.bLength		= USB_DT_ENDPOINT_SIZE,
++	.bDescriptorType	= USB_DT_ENDPOINT,
++	.bEndpointAddress	= USB_DIR_IN,
++	.bmAttributes		= USB_ENDPOINT_XFER_BULK,
++	.wMaxPacketSize		= cpu_to_le16(LSTP_MSG_SIZE),
++	.bInterval		= 1,
++};
++
++static struct usb_endpoint_descriptor hs_lstp_out_desc = {
++	.bLength		= USB_DT_ENDPOINT_SIZE,
++	.bDescriptorType	= USB_DT_ENDPOINT,
++	.bEndpointAddress	= USB_DIR_OUT,
++	.bmAttributes		= USB_ENDPOINT_XFER_BULK,
++	.wMaxPacketSize		= cpu_to_le16(LSTP_MSG_SIZE),
++	.bInterval		= 1,
++};
++
++static struct usb_descriptor_header *hs_lstp_descs[] = {
++	(struct usb_descriptor_header *)&lstp_intf_desc,
++	(struct usb_descriptor_header *)&hs_lstp_in_desc,
++	(struct usb_descriptor_header *)&hs_lstp_out_desc,
++	NULL,
++};
++
++static struct usb_endpoint_descriptor ss_lstp_in_desc = {
++	.bLength		= USB_DT_ENDPOINT_SIZE,
++	.bDescriptorType	= USB_DT_ENDPOINT,
++	.bEndpointAddress	= USB_DIR_IN,
++	.bmAttributes		= USB_ENDPOINT_XFER_BULK,
++	.wMaxPacketSize		= cpu_to_le16(1024),
++};
++
++static struct usb_ss_ep_comp_descriptor ss_lstp_in_comp_desc = {
++	.bLength		= USB_DT_SS_EP_COMP_SIZE,
++	.bDescriptorType	= USB_DT_SS_ENDPOINT_COMP,
++};
++
++static struct usb_endpoint_descriptor ss_lstp_out_desc = {
++	.bLength		= USB_DT_ENDPOINT_SIZE,
++	.bDescriptorType	= USB_DT_ENDPOINT,
++	.bEndpointAddress	= USB_DIR_OUT,
++	.bmAttributes		= USB_ENDPOINT_XFER_BULK,
++	.wMaxPacketSize		= cpu_to_le16(1024),
++};
++
++static struct usb_ss_ep_comp_descriptor ss_lstp_out_comp_desc = {
++	.bLength		= USB_DT_SS_EP_COMP_SIZE,
++	.bDescriptorType	= USB_DT_SS_ENDPOINT_COMP,
++};
++
++static struct usb_descriptor_header *ss_lstp_descs[] = {
++	(struct usb_descriptor_header *)&lstp_intf_desc,
++	(struct usb_descriptor_header *)&ss_lstp_in_desc,
++	(struct usb_descriptor_header *)&ss_lstp_in_comp_desc,
++	(struct usb_descriptor_header *)&ss_lstp_out_desc,
++	(struct usb_descriptor_header *)&ss_lstp_out_comp_desc,
++	NULL,
++};
++
++static struct usb_string lstp_string_defs[] = {
++	[0].s = "LSTP",
++	{  } /* end of list */
++};
++
++static struct usb_gadget_strings lstp_string_table = {
++	.language	= 0x0409,	/* en-us */
++	.strings	= lstp_string_defs,
++};
++
++static struct usb_gadget_strings *lstp_strings[] = {
++	&lstp_string_table,
++	NULL,
++};
++
++/* ------------------------------------------------------------------ */
++/* Transport								*/
++/* ------------------------------------------------------------------ */
++
++static struct f_lstp_tx *f_lstp_tx_take(struct f_lstp *fn)
++{
++	struct f_lstp_tx *tx = NULL;
++	unsigned long flags;
++
++	spin_lock_irqsave(&fn->tx_lock, flags);
++	if (fn->online && !list_empty(&fn->tx_free)) {
++		tx = list_first_entry(&fn->tx_free, struct f_lstp_tx, list);
++		list_del(&tx->list);
++	}
++	spin_unlock_irqrestore(&fn->tx_lock, flags);
++
++	return tx;
++}
++
++/* Wakeup predicate only; the winner is decided by f_lstp_tx_take(). */
++static bool f_lstp_tx_empty(struct f_lstp *fn)
++{
++	unsigned long flags;
++	bool empty;
++
++	spin_lock_irqsave(&fn->tx_lock, flags);
++	empty = list_empty(&fn->tx_free);
++	spin_unlock_irqrestore(&fn->tx_lock, flags);
++
++	return empty;
++}
++
++static void f_lstp_tx_give(struct f_lstp *fn, struct f_lstp_tx *tx)
++{
++	unsigned long flags;
++
++	spin_lock_irqsave(&fn->tx_lock, flags);
++	list_add_tail(&tx->list, &fn->tx_free);
++	spin_unlock_irqrestore(&fn->tx_lock, flags);
++
++	wake_up(&fn->tx_wait);
++}
++
++static bool f_lstp_is_online(void *ctx)
++{
++	struct f_lstp *fn = ctx;
++
++	return READ_ONCE(fn->online);
++}
++
++static int f_lstp_do_send(void *ctx, const void *buf, size_t len)
++{
++	struct f_lstp *fn = ctx;
++	struct f_lstp_tx *tx;
++	struct usb_request *req;
++	unsigned long deadline;
++	int ret;
++
++	if (!READ_ONCE(fn->online))
++		return -ESHUTDOWN;
++
++	/*
++	 * When all IN requests are in flight, wait a little for one to come
++	 * back.  Producers always run in process context: the RX workqueue
++	 * or a threaded GPIO interrupt.
++	 */
++	deadline = jiffies + msecs_to_jiffies(LSTP_TX_WAIT_MS);
++	for (;;) {
++		tx = f_lstp_tx_take(fn);
++		if (tx)
++			break;
++		if (!READ_ONCE(fn->online))
++			return -ESHUTDOWN;
++		if (time_after_eq(jiffies, deadline))
++			return -EBUSY;
++		wait_event_timeout(fn->tx_wait,
++				   !f_lstp_tx_empty(fn) ||
++				   !READ_ONCE(fn->online),
++				   deadline - jiffies);
++	}
++
++	req = tx->req;
++	memcpy(req->buf, buf, len);
++	req->length = len;
++	/*
++	 * Terminate the transfer with a zero length packet when the message
++	 * happens to be a multiple of the packet size but shorter than the
++	 * maximum message the host asked for, otherwise the host side URB
++	 * would not complete.
++	 */
++	req->zero = (len % fn->in_ep->maxpacket == 0) && (len < LSTP_MSG_SIZE);
++
++	ret = usb_ep_queue(fn->in_ep, req, GFP_KERNEL);
++	if (ret) {
++		f_lstp_tx_give(fn, tx);
++		return ret;
++	}
++
++	return 0;
++}
++
++/*
++ * The host sizes its receive buffer from the same endpoint descriptor, so a
++ * message longer than one maximum sized packet is rejected there rather than
++ * reassembled.  At full speed that caps a payload at 60 bytes.
++ */
++static size_t f_lstp_max_payload(void *ctx)
++{
++	struct f_lstp *fn = ctx;
++	size_t maxpacket = fn->in_ep->maxpacket;
++
++	if (!maxpacket || maxpacket > LSTP_MSG_SIZE)
++		maxpacket = LSTP_MSG_SIZE;
++
++	return maxpacket - LSTP_HDR_LEN;
++}
++
++static const struct lstp_transport f_lstp_transport = {
++	.send		= f_lstp_do_send,
++	.online		= f_lstp_is_online,
++	.max_payload	= f_lstp_max_payload,
++};
++
++/* ------------------------------------------------------------------ */
++/* Endpoint plumbing							*/
++/* ------------------------------------------------------------------ */
++
++static void f_lstp_in_complete(struct usb_ep *ep, struct usb_request *req)
++{
++	struct f_lstp_tx *tx = req->context;
++
++	if (req->status && req->status != -ESHUTDOWN &&
++	    req->status != -ECONNRESET && req->status != -ECONNABORTED)
++		pr_debug("lstp: IN transfer failed: %d\n", req->status);
++
++	f_lstp_tx_give(tx->fn, tx);
++}
++
++static void f_lstp_rx_work(struct work_struct *work)
++{
++	struct f_lstp_rx *rx = container_of(work, struct f_lstp_rx, work);
++	struct f_lstp *fn = rx->fn;
++	struct usb_request *req = rx->req;
++	int ret;
++
++	lstp_handle_message(fn->dev, req->buf, req->actual);
++
++	if (!READ_ONCE(fn->online))
++		return;
++
++	req->length = usb_ep_align(fn->out_ep, LSTP_MSG_SIZE);
++	ret = usb_ep_queue(fn->out_ep, req, GFP_KERNEL);
++	if (ret)
++		pr_debug("lstp: cannot rearm OUT endpoint: %d\n", ret);
++}
++
++static void f_lstp_out_complete(struct usb_ep *ep, struct usb_request *req)
++{
++	struct f_lstp_rx *rx = req->context;
++	struct f_lstp *fn = rx->fn;
++
++	if (req->status) {
++		/* Endpoint went away; the request is freed by disable(). */
++		return;
++	}
++
++	if (!READ_ONCE(fn->online))
++		return;
++
++	queue_work(fn->wq, &rx->work);
++}
++
++/* Endpoints must already be disabled so that no new work can be queued. */
++static void f_lstp_drain_work(struct f_lstp *fn)
++{
++	unsigned int i;
++
++	for (i = 0; i < LSTP_RX_REQS; i++)
++		cancel_work_sync(&fn->rx[i].work);
++}
++
++static void f_lstp_free_reqs(struct f_lstp *fn)
++{
++	unsigned int i;
++
++	for (i = 0; i < LSTP_RX_REQS; i++) {
++		if (fn->rx[i].req) {
++			free_ep_req(fn->out_ep, fn->rx[i].req);
++			fn->rx[i].req = NULL;
++		}
++	}
++
++	for (i = 0; i < LSTP_TX_REQS; i++) {
++		if (fn->tx[i].req) {
++			free_ep_req(fn->in_ep, fn->tx[i].req);
++			fn->tx[i].req = NULL;
++		}
++	}
++
++	INIT_LIST_HEAD(&fn->tx_free);
++}
++
++static int f_lstp_alloc_reqs(struct f_lstp *fn)
++{
++	unsigned int i;
++
++	for (i = 0; i < LSTP_TX_REQS; i++) {
++		struct usb_request *req = alloc_ep_req(fn->in_ep,
++						       LSTP_MSG_SIZE);
++
++		if (!req)
++			goto err;
++
++		fn->tx[i].req = req;
++		req->context = &fn->tx[i];
++		req->complete = f_lstp_in_complete;
++		list_add_tail(&fn->tx[i].list, &fn->tx_free);
++	}
++
++	for (i = 0; i < LSTP_RX_REQS; i++) {
++		struct usb_request *req = alloc_ep_req(fn->out_ep,
++						       LSTP_MSG_SIZE);
++
++		if (!req)
++			goto err;
++
++		fn->rx[i].req = req;
++		req->context = &fn->rx[i];
++		req->complete = f_lstp_out_complete;
++	}
++
++	return 0;
++
++err:
++	f_lstp_free_reqs(fn);
++	return -ENOMEM;
++}
++
++static void f_lstp_disable(struct usb_function *f)
++{
++	struct f_lstp *fn = func_to_lstp(f);
++
++	if (!READ_ONCE(fn->online))
++		return;
++
++	WRITE_ONCE(fn->online, false);
++	wake_up_all(&fn->tx_wait);
++
++	lstp_dev_detach_transport(fn->dev, fn);
++
++	usb_ep_disable(fn->out_ep);
++	usb_ep_disable(fn->in_ep);
++
++	/* No RX work can be queued any more; drain what is left. */
++	f_lstp_drain_work(fn);
++
++	f_lstp_free_reqs(fn);
++
++	/* Drop channel state the host had set up (CS lines, GPIO IRQs). */
++	lstp_dev_reset_channels(fn->dev);
++}
++
++static int f_lstp_set_alt(struct usb_function *f, unsigned int intf,
++			  unsigned int alt)
++{
++	struct f_lstp *fn = func_to_lstp(f);
++	unsigned int i;
++	int ret;
++
++	if (alt != 0)
++		return -EINVAL;
++
++	if (READ_ONCE(fn->online))
++		f_lstp_disable(f);
++
++	ret = config_ep_by_speed(f->config->cdev->gadget, f, fn->in_ep);
++	if (ret)
++		return ret;
++	ret = usb_ep_enable(fn->in_ep);
++	if (ret)
++		return ret;
++
++	ret = config_ep_by_speed(f->config->cdev->gadget, f, fn->out_ep);
++	if (ret)
++		goto err_in;
++	ret = usb_ep_enable(fn->out_ep);
++	if (ret)
++		goto err_in;
++
++	ret = f_lstp_alloc_reqs(fn);
++	if (ret)
++		goto err_out;
++
++	ret = lstp_dev_attach_transport(fn->dev, &f_lstp_transport, fn);
++	if (ret)
++		goto err_reqs;
++
++	WRITE_ONCE(fn->online, true);
++
++	for (i = 0; i < LSTP_RX_REQS; i++) {
++		fn->rx[i].req->length = usb_ep_align(fn->out_ep,
++						     LSTP_MSG_SIZE);
++		ret = usb_ep_queue(fn->out_ep, fn->rx[i].req, GFP_KERNEL);
++		if (ret)
++			goto err_online;
++	}
++
++	return 0;
++
++err_online:
++	WRITE_ONCE(fn->online, false);
++	usb_ep_disable(fn->out_ep);
++	usb_ep_disable(fn->in_ep);
++	lstp_dev_detach_transport(fn->dev, fn);
++	f_lstp_drain_work(fn);
++	f_lstp_free_reqs(fn);
++	return ret;
++
++err_reqs:
++	f_lstp_free_reqs(fn);
++err_out:
++	usb_ep_disable(fn->out_ep);
++err_in:
++	usb_ep_disable(fn->in_ep);
++	return ret;
++}
++
++/* ------------------------------------------------------------------ */
++/* Function lifecycle							*/
++/* ------------------------------------------------------------------ */
++
++static int f_lstp_bind(struct usb_configuration *c, struct usb_function *f)
++{
++	struct usb_composite_dev *cdev = c->cdev;
++	struct f_lstp *fn = func_to_lstp(f);
++	struct usb_string *us;
++	int id;
++	int ret;
++
++	id = usb_interface_id(c, f);
++	if (id < 0)
++		return id;
++	lstp_intf_desc.bInterfaceNumber = id;
++
++	us = usb_gstrings_attach(cdev, lstp_strings,
++				 ARRAY_SIZE(lstp_string_defs));
++	if (IS_ERR(us))
++		return PTR_ERR(us);
++	lstp_intf_desc.iInterface = us[0].id;
++
++	fn->in_ep = usb_ep_autoconfig(cdev->gadget, &fs_lstp_in_desc);
++	if (!fn->in_ep) {
++		ERROR(cdev, "%s: cannot autoconfigure IN endpoint on %s\n",
++		      f->name, cdev->gadget->name);
++		return -ENODEV;
++	}
++
++	fn->out_ep = usb_ep_autoconfig(cdev->gadget, &fs_lstp_out_desc);
++	if (!fn->out_ep) {
++		ERROR(cdev, "%s: cannot autoconfigure OUT endpoint on %s\n",
++		      f->name, cdev->gadget->name);
++		return -ENODEV;
++	}
++
++	hs_lstp_in_desc.bEndpointAddress = fs_lstp_in_desc.bEndpointAddress;
++	hs_lstp_out_desc.bEndpointAddress = fs_lstp_out_desc.bEndpointAddress;
++	ss_lstp_in_desc.bEndpointAddress = fs_lstp_in_desc.bEndpointAddress;
++	ss_lstp_out_desc.bEndpointAddress = fs_lstp_out_desc.bEndpointAddress;
++
++	ret = usb_assign_descriptors(f, fs_lstp_descs, hs_lstp_descs,
++				     ss_lstp_descs, ss_lstp_descs);
++	if (ret)
++		return ret;
++
++	/*
++	 * Ordered so that requests are handled in the order the host sent
++	 * them, which is what the single threaded OpenSMA implementation
++	 * guarantees.
++	 */
++	fn->wq = alloc_ordered_workqueue("lstp", 0);
++	if (!fn->wq) {
++		usb_free_all_descriptors(f);
++		return -ENOMEM;
++	}
++
++	return 0;
++}
++
++static void f_lstp_unbind(struct usb_configuration *c, struct usb_function *f)
++{
++	struct f_lstp *fn = func_to_lstp(f);
++
++	/* Normally already done by ->disable, but do not leave work behind. */
++	f_lstp_disable(f);
++
++	destroy_workqueue(fn->wq);
++	fn->wq = NULL;
++	usb_free_all_descriptors(f);
++}
++
++static void f_lstp_free_func(struct usb_function *f)
++{
++	struct f_lstp *fn = func_to_lstp(f);
++	struct f_lstp_opts *opts = container_of(f->fi, struct f_lstp_opts,
++						func_inst);
++
++	mutex_lock(&opts->lock);
++	opts->refcnt--;
++	mutex_unlock(&opts->lock);
++
++	kfree(fn);
++}
++
++static struct usb_function *f_lstp_alloc(struct usb_function_instance *fi)
++{
++	struct f_lstp_opts *opts = container_of(fi, struct f_lstp_opts,
++						func_inst);
++	struct f_lstp *fn;
++	unsigned int i;
++
++	fn = kzalloc(sizeof(*fn), GFP_KERNEL);
++	if (!fn)
++		return ERR_PTR(-ENOMEM);
++
++	mutex_lock(&opts->lock);
++	opts->refcnt++;
++	mutex_unlock(&opts->lock);
++
++	fn->dev = opts->dev;
++	spin_lock_init(&fn->tx_lock);
++	INIT_LIST_HEAD(&fn->tx_free);
++	init_waitqueue_head(&fn->tx_wait);
++
++	for (i = 0; i < LSTP_RX_REQS; i++) {
++		fn->rx[i].fn = fn;
++		INIT_WORK(&fn->rx[i].work, f_lstp_rx_work);
++	}
++	for (i = 0; i < LSTP_TX_REQS; i++)
++		fn->tx[i].fn = fn;
++
++	fn->func.name = "lstp";
++	fn->func.bind = f_lstp_bind;
++	fn->func.unbind = f_lstp_unbind;
++	fn->func.set_alt = f_lstp_set_alt;
++	fn->func.disable = f_lstp_disable;
++	fn->func.free_func = f_lstp_free_func;
++
++	return &fn->func;
++}
++
++/* ------------------------------------------------------------------ */
++/* configfs instance							*/
++/* ------------------------------------------------------------------ */
++
++static inline struct f_lstp_opts *to_f_lstp_opts(struct config_item *item)
++{
++	return container_of(to_config_group(item), struct f_lstp_opts,
++			    func_inst.group);
++}
++
++static void f_lstp_attr_release(struct config_item *item)
++{
++	struct f_lstp_opts *opts = to_f_lstp_opts(item);
++
++	usb_put_function_instance(&opts->func_inst);
++}
++
++static struct configfs_item_operations f_lstp_item_ops = {
++	.release	= f_lstp_attr_release,
++};
++
++static ssize_t f_lstp_opts_channels_show(struct config_item *item, char *page)
++{
++	struct f_lstp_opts *opts = to_f_lstp_opts(item);
++	struct lstp_dev *dev = opts->dev;
++	unsigned int i;
++	int len = 0;
++
++	down_read(&dev->sem);
++	if (dev->dead) {
++		up_read(&dev->sem);
++		return sysfs_emit(page, "\n");
++	}
++
++	for (i = 0; i < dev->nr_channels; i++) {
++		struct lstp_channel *ch = &dev->channels[i];
++
++		len += sysfs_emit_at(page, len, "%u %u %.*s\n", ch->id,
++				     ch->type, (int)sizeof(ch->name),
++				     ch->name);
++	}
++	up_read(&dev->sem);
++
++	return len;
++}
++
++CONFIGFS_ATTR_RO(f_lstp_opts_, channels);
++
++static struct configfs_attribute *f_lstp_attrs[] = {
++	&f_lstp_opts_attr_channels,
++	NULL,
++};
++
++static const struct config_item_type f_lstp_func_type = {
++	.ct_item_ops	= &f_lstp_item_ops,
++	.ct_attrs	= f_lstp_attrs,
++	.ct_owner	= THIS_MODULE,
++};
++
++static void f_lstp_free_inst(struct usb_function_instance *fi)
++{
++	struct f_lstp_opts *opts = container_of(fi, struct f_lstp_opts,
++						func_inst);
++
++	lstp_dev_put(opts->dev);
++	kfree(opts);
++}
++
++static struct usb_function_instance *f_lstp_alloc_inst(void)
++{
++	struct f_lstp_opts *opts;
++	struct lstp_dev *dev;
++
++	dev = lstp_dev_get();
++	if (!dev)
++		return ERR_PTR(-ENODEV);
++
++	opts = kzalloc(sizeof(*opts), GFP_KERNEL);
++	if (!opts) {
++		lstp_dev_put(dev);
++		return ERR_PTR(-ENOMEM);
++	}
++
++	mutex_init(&opts->lock);
++	opts->dev = dev;
++	opts->func_inst.free_func_inst = f_lstp_free_inst;
++
++	config_group_init_type_name(&opts->func_inst.group, "",
++				    &f_lstp_func_type);
++
++	return &opts->func_inst;
++}
++
++DECLARE_USB_FUNCTION(lstp, f_lstp_alloc_inst, f_lstp_alloc);
++
++int lstp_function_register(void)
++{
++	return usb_function_register(&lstpusb_func);
++}
++
++void lstp_function_unregister(void)
++{
++	usb_function_unregister(&lstpusb_func);
++}
+diff --git a/drivers/usb/misc/lstp_bridge/lstp-core.c b/drivers/usb/misc/lstp_bridge/lstp-core.c
+new file mode 100644
+index 000000000000..04fbb3ed2285
+--- /dev/null
++++ b/drivers/usb/misc/lstp_bridge/lstp-core.c
+@@ -0,0 +1,586 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * LSTP core: device tree bound channel table, message validation and
++ * dispatch, and the transport glue shared with the USB function.
++ *
++ * Copyright (c) 2026 Axiado Corporation
++ */
++
++#define pr_fmt(fmt) "lstp: " fmt
++
++#include <linux/errno.h>
++#include <linux/kref.h>
++#include <linux/module.h>
++#include <linux/of.h>
++#include <linux/platform_device.h>
++#include <linux/slab.h>
++#include <linux/spinlock.h>
++#include <linux/string.h>
++
++#include "lstp.h"
++
++static DEFINE_MUTEX(lstp_singleton_lock);
++static struct lstp_dev *lstp_singleton;
++
++/* ------------------------------------------------------------------ */
++/* Reference counting							*/
++/* ------------------------------------------------------------------ */
++
++static void lstp_dev_release(struct kref *kref)
++{
++	struct lstp_dev *dev = container_of(kref, struct lstp_dev, kref);
++
++	kfree(dev->channels);
++	kfree(dev);
++}
++
++struct lstp_dev *lstp_dev_get(void)
++{
++	struct lstp_dev *dev;
++
++	mutex_lock(&lstp_singleton_lock);
++	dev = lstp_singleton;
++	if (dev)
++		kref_get(&dev->kref);
++	mutex_unlock(&lstp_singleton_lock);
++
++	return dev;
++}
++
++void lstp_dev_put(struct lstp_dev *dev)
++{
++	if (dev)
++		kref_put(&dev->kref, lstp_dev_release);
++}
++
++/* ------------------------------------------------------------------ */
++/* Transport								*/
++/* ------------------------------------------------------------------ */
++
++int lstp_dev_attach_transport(struct lstp_dev *dev,
++			      const struct lstp_transport *xport, void *ctx)
++{
++	unsigned long flags;
++	int ret = 0;
++
++	spin_lock_irqsave(&dev->xport_lock, flags);
++	if (dev->xport) {
++		ret = -EBUSY;
++	} else {
++		dev->xport = xport;
++		dev->xport_ctx = ctx;
++	}
++	spin_unlock_irqrestore(&dev->xport_lock, flags);
++
++	return ret;
++}
++
++void lstp_dev_detach_transport(struct lstp_dev *dev, void *ctx)
++{
++	unsigned long flags;
++
++	spin_lock_irqsave(&dev->xport_lock, flags);
++	if (dev->xport_ctx == ctx) {
++		dev->xport = NULL;
++		dev->xport_ctx = NULL;
++	}
++	spin_unlock_irqrestore(&dev->xport_lock, flags);
++}
++
++bool lstp_online(struct lstp_dev *dev)
++{
++	const struct lstp_transport *xport;
++	unsigned long flags;
++	void *ctx;
++	bool online = false;
++
++	spin_lock_irqsave(&dev->xport_lock, flags);
++	xport = dev->xport;
++	ctx = dev->xport_ctx;
++	spin_unlock_irqrestore(&dev->xport_lock, flags);
++
++	if (xport && xport->online)
++		online = xport->online(ctx);
++
++	return online;
++}
++
++/*
++ * Largest payload a single message may carry towards the host right now.
++ * Falls back to the protocol maximum while no transport is attached; a
++ * caller that acts on the answer has to be online anyway.
++ */
++size_t lstp_max_payload(struct lstp_dev *dev)
++{
++	const struct lstp_transport *xport;
++	unsigned long flags;
++	size_t max = LSTP_MAX_PAYLOAD;
++	void *ctx;
++
++	spin_lock_irqsave(&dev->xport_lock, flags);
++	xport = dev->xport;
++	ctx = dev->xport_ctx;
++	spin_unlock_irqrestore(&dev->xport_lock, flags);
++
++	if (xport && xport->max_payload)
++		max = min(max, xport->max_payload(ctx));
++
++	return max;
++}
++
++int lstp_bridge_send(struct lstp_dev *dev, const void *buf, size_t len)
++{
++	const struct lstp_transport *xport;
++	unsigned long flags;
++	void *ctx;
++
++	if (len < LSTP_HDR_LEN || len > LSTP_MSG_SIZE)
++		return -EINVAL;
++
++	spin_lock_irqsave(&dev->xport_lock, flags);
++	xport = dev->xport;
++	ctx = dev->xport_ctx;
++	spin_unlock_irqrestore(&dev->xport_lock, flags);
++
++	if (!xport)
++		return -ENODEV;
++
++	return xport->send(ctx, buf, len);
++}
++
++/*
++ * Small helper for header-only and short-payload messages.  Handlers that
++ * emit large payloads assemble the message in their own buffer and call
++ * lstp_bridge_send() directly.
++ */
++#define LSTP_SEND_MSG_MAX_PAYLOAD	64
++
++int lstp_send_msg(struct lstp_dev *dev, u8 channel_id, u8 cmd_status,
++		  const void *payload, u16 payload_len)
++{
++	u8 msg[LSTP_HDR_LEN + LSTP_SEND_MSG_MAX_PAYLOAD];
++	struct lstp_hdr *hdr = (struct lstp_hdr *)msg;
++
++	if (WARN_ON_ONCE(payload_len > LSTP_SEND_MSG_MAX_PAYLOAD))
++		return -EINVAL;
++
++	hdr->channel_id = channel_id;
++	hdr->cmd_status_code = cmd_status;
++	lstp_hdr_set_payload_len(hdr, payload_len);
++	if (payload_len)
++		memcpy(msg + LSTP_HDR_LEN, payload, payload_len);
++
++	return lstp_bridge_send(dev, msg, LSTP_HDR_LEN + payload_len);
++}
++
++int lstp_send_response(struct lstp_channel *ch, u8 status,
++		       const void *payload, u16 payload_len)
++{
++	return lstp_send_msg(ch->dev, ch->id, status | LSTP_RESPONSE_BIT,
++			     payload, payload_len);
++}
++
++u8 lstp_status_from_errno(int err)
++{
++	switch (err) {
++	case 0:
++		return LSTP_ST_SUCCESS;
++	case -EOPNOTSUPP:
++	case -ENOTTY:
++		return LSTP_ST_NOT_SUPPORTED;
++	case -ETIMEDOUT:
++		return LSTP_ST_TIMEOUT;
++	case -EBUSY:
++		return LSTP_ST_BUSY;
++	case -ENXIO:
++	case -ENODEV:
++		return LSTP_ST_NAK;
++	case -EAGAIN:
++		return LSTP_ST_ARB_LOST;
++	case -E2BIG:
++	case -EMSGSIZE:
++		return LSTP_ST_TOO_LARGE;
++	default:
++		return LSTP_ST_ERROR;
++	}
++}
++
++/* ------------------------------------------------------------------ */
++/* Message dispatch							*/
++/* ------------------------------------------------------------------ */
++
++static struct lstp_channel *lstp_first_channel(struct lstp_dev *dev, u8 type)
++{
++	unsigned int i;
++
++	for (i = 0; i < dev->nr_channels; i++)
++		if (dev->channels[i].type == type)
++			return &dev->channels[i];
++
++	return NULL;
++}
++
++/*
++ * The legacy flashrom host driver always addresses the SPI channel as
++ * channel 0.  Management commands start at 0x08 and the SPI command field
++ * is only four bits wide, so the two cannot collide.
++ */
++static struct lstp_channel *lstp_resolve_channel(struct lstp_dev *dev,
++						 const struct lstp_hdr *hdr)
++{
++	struct lstp_channel *spi;
++
++	if (hdr->channel_id == 0 &&
++	    (hdr->cmd_status_code & LSTP_SPI_CMD_MASK) <= LSTP_SPI_CMD_END) {
++		spi = lstp_first_channel(dev, LSTP_CH_SPI);
++		if (spi)
++			return spi;
++	}
++
++	return &dev->channels[hdr->channel_id];
++}
++
++void lstp_handle_message(struct lstp_dev *dev, const u8 *buf, size_t len)
++{
++	const struct lstp_hdr *hdr = (const struct lstp_hdr *)buf;
++	struct lstp_channel *ch = NULL;
++	u8 status = LSTP_ST_SILENT_DROP;
++	size_t msg_len;
++	int ret;
++
++	down_read(&dev->sem);
++
++	if (dev->dead)
++		goto out;
++
++	/* Malformed beyond repair: no channel to answer on. */
++	if (len < LSTP_HDR_LEN || len > LSTP_MSG_SIZE)
++		goto out;
++
++	msg_len = lstp_hdr_payload_len(hdr) + LSTP_HDR_LEN;
++	if (msg_len > LSTP_MSG_SIZE) {
++		status = LSTP_ST_NOT_SUPPORTED;
++		goto out;
++	}
++	if (msg_len > len) {
++		status = LSTP_ST_ERROR;
++		goto out;
++	}
++
++	if (hdr->channel_id >= dev->nr_channels) {
++		status = LSTP_ST_SILENT_DROP;
++		goto out;
++	}
++
++	ch = lstp_resolve_channel(dev, hdr);
++
++	if (!ch->enabled || !ch->ops || !ch->ops->receive) {
++		status = LSTP_ST_NOT_SUPPORTED;
++		goto out;
++	}
++
++	ret = ch->ops->receive(ch, buf, msg_len);
++	status = lstp_status_from_errno(ret);
++
++out:
++	if (status != LSTP_ST_SUCCESS && status != LSTP_ST_SILENT_DROP)
++		lstp_send_msg(dev, ch ? ch->id : hdr->channel_id,
++			      status | LSTP_RESPONSE_BIT, NULL, 0);
++	up_read(&dev->sem);
++}
++
++void lstp_dev_reset_channels(struct lstp_dev *dev)
++{
++	unsigned int i;
++
++	down_read(&dev->sem);
++	if (!dev->dead) {
++		for (i = 0; i < dev->nr_channels; i++)
++			if (dev->channels[i].ops &&
++			    dev->channels[i].ops->reset)
++				dev->channels[i].ops->reset(&dev->channels[i]);
++	}
++	up_read(&dev->sem);
++}
++
++/* ------------------------------------------------------------------ */
++/* Device tree binding							*/
++/* ------------------------------------------------------------------ */
++
++struct lstp_type_info {
++	const char *name;
++	u8 type;
++	const struct lstp_channel_ops *ops;
++};
++
++static const struct lstp_type_info lstp_types[] = {
++	{ "management",	LSTP_CH_MANAGEMENT,	&lstp_mgmt_ops },
++	{ "i2c",	LSTP_CH_I2C,		&lstp_i2c_ops },
++	{ "gpio",	LSTP_CH_GPIO,		&lstp_gpio_ops },
++	{ "spi",	LSTP_CH_SPI,		&lstp_spi_ops },
++	{ "virtual-uart", LSTP_CH_UART,		&lstp_vuart_ops },
++};
++
++static const struct lstp_type_info *lstp_type_find(const char *name)
++{
++	unsigned int i;
++
++	for (i = 0; i < ARRAY_SIZE(lstp_types); i++)
++		if (!strcmp(lstp_types[i].name, name))
++			return &lstp_types[i];
++
++	return NULL;
++}
++
++/*
++ * The wire format carries a fixed size, NUL padded but not necessarily
++ * NUL terminated name, so a full 16 character name is legal.
++ */
++static void lstp_channel_set_name(struct lstp_channel *ch, const char *name)
++{
++	size_t n = min(strlen(name), sizeof(ch->name));
++
++	memset(ch->name, 0, sizeof(ch->name));
++	memcpy(ch->name, name, n);
++}
++
++static void lstp_remove_channels(struct lstp_dev *dev)
++{
++	unsigned int i;
++
++	for (i = 0; i < dev->nr_channels; i++) {
++		struct lstp_channel *ch = &dev->channels[i];
++
++		if (ch->ops && ch->ops->remove)
++			ch->ops->remove(ch);
++		of_node_put(ch->np);
++		ch->np = NULL;
++		ch->ops = NULL;
++	}
++}
++
++static int lstp_parse_channel(struct lstp_dev *dev, struct device_node *np)
++{
++	const struct lstp_type_info *info;
++	struct lstp_channel *ch;
++	const char *name;
++	const char *type;
++	u32 id;
++	int ret;
++
++	ret = of_property_read_u32(np, "reg", &id);
++	if (ret) {
++		dev_err(dev->dev, "%pOF: missing reg (channel id)\n", np);
++		return ret;
++	}
++	if (id >= dev->nr_channels) {
++		dev_err(dev->dev, "%pOF: channel id %u out of range (%u channels)\n",
++			np, id, dev->nr_channels);
++		return -EINVAL;
++	}
++
++	ch = &dev->channels[id];
++	if (ch->ops) {
++		dev_err(dev->dev, "%pOF: duplicate channel id %u\n", np, id);
++		return -EINVAL;
++	}
++
++	ret = of_property_read_string(np, "nvidia,channel-type", &type);
++	if (ret) {
++		dev_err(dev->dev, "%pOF: missing nvidia,channel-type\n", np);
++		return ret;
++	}
++
++	info = lstp_type_find(type);
++	if (!info) {
++		dev_err(dev->dev, "%pOF: unsupported channel type '%s'\n",
++			np, type);
++		return -EINVAL;
++	}
++
++	if (id == 0 && info->type != LSTP_CH_MANAGEMENT) {
++		dev_err(dev->dev, "%pOF: channel 0 must be the management channel\n",
++			np);
++		return -EINVAL;
++	}
++	if (id != 0 && info->type == LSTP_CH_MANAGEMENT) {
++		dev_err(dev->dev, "%pOF: management channel must be channel 0\n",
++			np);
++		return -EINVAL;
++	}
++
++	ch->dev = dev;
++	ch->id = id;
++	ch->type = info->type;
++	ch->ops = info->ops;
++	ch->enabled = true;
++	ch->np = of_node_get(np);
++
++	if (of_property_read_string(np, "nvidia,channel-name", &name))
++		name = np->name;
++	lstp_channel_set_name(ch, name);
++
++	if (ch->ops->probe) {
++		ret = ch->ops->probe(ch);
++		if (ret) {
++			if (ret != -EPROBE_DEFER)
++				dev_err(dev->dev, "%pOF: channel probe failed: %d\n",
++					np, ret);
++			of_node_put(ch->np);
++			ch->np = NULL;
++			ch->ops = NULL;
++			return ret;
++		}
++	}
++
++	dev_dbg(dev->dev, "###### channel %u: type %s name '%.*s'\n", id, type,
++		(int)sizeof(ch->name), ch->name);
++
++	return 0;
++}
++
++static int lstp_probe(struct platform_device *pdev)
++{
++	struct device *pd = &pdev->dev;
++	struct lstp_dev *dev;
++	unsigned int count;
++	unsigned int i;
++	int ret;
++
++	count = of_get_available_child_count(pd->of_node);
++	if (!count || count > LSTP_MAX_CHANNELS) {
++		dev_err(pd, "need 1..%u channel nodes, found %u\n",
++			LSTP_MAX_CHANNELS, count);
++		return -EINVAL;
++	}
++	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
++	if (!dev)
++		return -ENOMEM;
++
++	dev->channels = kcalloc(count, sizeof(*dev->channels), GFP_KERNEL);
++	if (!dev->channels) {
++		kfree(dev);
++		return -ENOMEM;
++	}
++
++	dev->dev = pd;
++	dev->nr_channels = count;
++	kref_init(&dev->kref);
++	init_rwsem(&dev->sem);
++	spin_lock_init(&dev->xport_lock);
++
++	for_each_available_child_of_node_scoped(pd->of_node, np) {
++		ret = lstp_parse_channel(dev, np);
++		if (ret)
++			goto err;
++	}
++
++	for (i = 0; i < count; i++) {
++		if (!dev->channels[i].ops) {
++			dev_err(pd, "channel id %u is not described\n", i);
++			ret = -EINVAL;
++			goto err;
++		}
++	}
++
++	mutex_lock(&lstp_singleton_lock);
++	if (lstp_singleton) {
++		mutex_unlock(&lstp_singleton_lock);
++		dev_err(pd, "only one LSTP device is supported\n");
++		ret = -EEXIST;
++		goto err;
++	}
++	lstp_singleton = dev;
++	mutex_unlock(&lstp_singleton_lock);
++
++	platform_set_drvdata(pdev, dev);
++	dev_info(pd, "LSTP device with %u channels\n", count);
++
++	return 0;
++
++err:
++	lstp_remove_channels(dev);
++	lstp_dev_put(dev);
++	return ret;
++}
++
++static void lstp_remove(struct platform_device *pdev)
++{
++	struct lstp_dev *dev = platform_get_drvdata(pdev);
++
++	mutex_lock(&lstp_singleton_lock);
++	if (lstp_singleton == dev)
++		lstp_singleton = NULL;
++	mutex_unlock(&lstp_singleton_lock);
++
++	/*
++	 * Wait for any in flight message handling to finish, then tear the
++	 * channels down.  The USB function may still hold a reference to
++	 * @dev; from here on it only ever sees LSTP_ST_ERROR.
++	 */
++	down_write(&dev->sem);
++	dev->dead = true;
++	lstp_remove_channels(dev);
++	up_write(&dev->sem);
++
++	lstp_dev_put(dev);
++}
++
++static const struct of_device_id lstp_of_match[] = {
++	{ .compatible = "nvidia,lstp" },
++	{ }
++};
++MODULE_DEVICE_TABLE(of, lstp_of_match);
++
++static struct platform_driver lstp_platform_driver = {
++	.driver = {
++		.name = "lstp",
++		.of_match_table = lstp_of_match,
++	},
++	.probe = lstp_probe,
++	.remove = lstp_remove,
++};
++
++static int __init lstp_init(void)
++{
++	int ret;
++
++	ret = lstp_spi_driver_register();
++	if (ret)
++		return ret;
++
++	ret = lstp_vuart_driver_register();
++	if (ret)
++		goto err_spi;
++
++	ret = platform_driver_register(&lstp_platform_driver);
++	if (ret)
++		goto err_vuart;
++
++	ret = lstp_function_register();
++	if (ret)
++		goto err_platform;
++
++	return 0;
++
++err_platform:
++	platform_driver_unregister(&lstp_platform_driver);
++err_vuart:
++	lstp_vuart_driver_unregister();
++err_spi:
++	lstp_spi_driver_unregister();
++	return ret;
++}
++module_init(lstp_init);
++
++static void __exit lstp_exit(void)
++{
++	lstp_function_unregister();
++	platform_driver_unregister(&lstp_platform_driver);
++	lstp_vuart_driver_unregister();
++	lstp_spi_driver_unregister();
++}
++module_exit(lstp_exit);
++
++MODULE_DESCRIPTION("LSTP vendor specific USB gadget function");
++MODULE_LICENSE("GPL");
+diff --git a/drivers/usb/misc/lstp_bridge/lstp-gpio.c b/drivers/usb/misc/lstp_bridge/lstp-gpio.c
+new file mode 100644
+index 000000000000..a211501984ff
+--- /dev/null
++++ b/drivers/usb/misc/lstp_bridge/lstp-gpio.c
+@@ -0,0 +1,728 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * LSTP GPIO channel, backed by gpio descriptors.
++ *
++ * The pin values exchanged with the host are logical levels, so a line
++ * described as GPIO_ACTIVE_LOW in the device tree is reported inverted
++ * with respect to the pad.  Describe lines as active high when the host is
++ * expected to see raw pad levels.
++ *
++ * Copyright (c) 2026 Axiado Corporation
++ */
++
++#include <linux/device.h>
++#include <linux/errno.h>
++#include <linux/gpio/consumer.h>
++#include <linux/interrupt.h>
++#include <linux/minmax.h>
++#include <linux/mutex.h>
++#include <linux/of.h>
++#include <linux/property.h>
++#include <linux/slab.h>
++#include <linux/string.h>
++
++#include "lstp.h"
++
++struct lstp_gpio;
++
++struct lstp_gpio_pin {
++	struct lstp_gpio *gpio;
++	struct gpio_desc *desc;
++	unsigned int index;
++	int irq;
++	bool irq_requested;
++	u8 irq_config;
++	bool allow_set_irq;
++	bool allow_direction_control;
++	char irq_name[32];
++	/* Wire representation; the direction field is refreshed on read. */
++	struct lstp_gpio_config cfg;
++};
++
++struct lstp_gpio {
++	struct lstp_channel *ch;
++	unsigned int nr_pins;
++	struct mutex lock;	/* serialises IRQ (re)configuration */
++	struct lstp_gpio_pin *pins;
++};
++
++#define LSTP_GPIO_CFG_HDR	sizeof(struct lstp_gpio_channel_config)
++#define LSTP_GPIO_CFG_PIN	sizeof(struct lstp_gpio_config)
++
++/* ------------------------------------------------------------------ */
++/* Device tree								*/
++/* ------------------------------------------------------------------ */
++
++static int lstp_gpio_parse_enum(struct device_node *np, const char *prop,
++				const char * const *names, unsigned int count,
++				u8 *out)
++{
++	const char *s;
++	unsigned int i;
++
++	if (of_property_read_string(np, prop, &s))
++		return 0;
++
++	for (i = 0; i < count; i++) {
++		if (!strcmp(s, names[i])) {
++			*out = i;
++			return 0;
++		}
++	}
++
++	return -EINVAL;
++}
++
++static const char * const lstp_gpio_drive_names[] = {
++	"push-pull", "open-drain", "open-source",
++};
++
++static const char * const lstp_gpio_bias_names[] = {
++	"none", "pull-up", "pull-down",
++};
++
++static int lstp_gpio_parse_pin(struct lstp_gpio *g, struct device_node *np)
++{
++	struct lstp_channel *ch = g->ch;
++	struct lstp_gpio_pin *pin;
++	struct lstp_gpio_config *cfg;
++	const char *label;
++	u32 index;
++	u32 val;
++	int ret;
++
++	ret = of_property_read_u32(np, "reg", &index);
++	if (ret) {
++		dev_err(ch->dev->dev, "%pOF: missing reg (pin index)\n", np);
++		return ret;
++	}
++	if (index >= g->nr_pins) {
++		dev_err(ch->dev->dev, "%pOF: pin index %u out of range\n",
++			np, index);
++		return -EINVAL;
++	}
++
++	pin = &g->pins[index];
++	if (pin->desc) {
++		dev_err(ch->dev->dev, "%pOF: duplicate pin index %u\n",
++			np, index);
++		return -EINVAL;
++	}
++
++	if (of_property_read_string(np, "label", &label))
++		label = np->name;
++
++	pin->gpio = g;
++	pin->index = index;
++	pin->irq = -1;
++	pin->irq_config = LSTP_GPIO_IRQ_DISABLED;
++	pin->allow_direction_control =
++		of_property_read_bool(np, "nvidia,allow-direction-control");
++
++	/*
++	 * GPIOD_ASIS: LSTP reports the direction the board booted with and
++	 * only changes it when the pin explicitly allows it.
++	 */
++	pin->desc = fwnode_gpiod_get_index(of_fwnode_handle(np), NULL, 0,
++					   GPIOD_ASIS, label);
++	if (IS_ERR(pin->desc)) {
++		ret = PTR_ERR(pin->desc);
++		pin->desc = NULL;
++		if (ret != -EPROBE_DEFER)
++			dev_err(ch->dev->dev, "%pOF: cannot get gpio: %d\n",
++				np, ret);
++		return ret;
++	}
++
++	cfg = &pin->cfg;
++	strscpy_pad((char *)cfg->gpio_name, label, sizeof(cfg->gpio_name));
++
++	cfg->default_output = of_property_read_bool(np, "nvidia,default-output-high") ?
++			      LSTP_GPIO_HIGH : LSTP_GPIO_LOW;
++	cfg->output_persist_state =
++		of_property_read_bool(np, "nvidia,output-persist");
++
++	ret = lstp_gpio_parse_enum(np, "nvidia,drive", lstp_gpio_drive_names,
++				   ARRAY_SIZE(lstp_gpio_drive_names),
++				   &cfg->output_drive_config);
++	if (ret)
++		goto err;
++
++	ret = lstp_gpio_parse_enum(np, "nvidia,bias", lstp_gpio_bias_names,
++				   ARRAY_SIZE(lstp_gpio_bias_names),
++				   &cfg->bias_pull_config);
++	if (ret)
++		goto err;
++
++	if (!of_property_read_u32(np, "nvidia,bias-strength", &val))
++		cfg->bias_pull_strength = cpu_to_le16(val);
++	if (!of_property_read_u32(np, "nvidia,drive-strength-ma", &val))
++		cfg->output_drive_strength = cpu_to_le16(val);
++	if (!of_property_read_u32(np, "nvidia,slew-rate", &val))
++		cfg->slew_rate = cpu_to_le16(val);
++	if (!of_property_read_u32(np, "nvidia,input-debounce-us", &val))
++		cfg->input_debounce_time = cpu_to_le16(val);
++
++	if (of_property_read_bool(np, "nvidia,allow-set-irq")) {
++		pin->irq = gpiod_to_irq(pin->desc);
++		if (pin->irq < 0) {
++			dev_warn(ch->dev->dev,
++				 "%pOF: no interrupt available, ignoring nvidia,allow-set-irq\n",
++				 np);
++		} else {
++			pin->allow_set_irq = true;
++			snprintf(pin->irq_name, sizeof(pin->irq_name),
++				 "lstp-%s", label);
++		}
++	}
++
++	return 0;
++
++err:
++	gpiod_put(pin->desc);
++	pin->desc = NULL;
++	dev_err(ch->dev->dev, "%pOF: bad pin configuration: %d\n", np, ret);
++	return ret;
++}
++
++static void lstp_gpio_release_pins(struct lstp_gpio *g)
++{
++	unsigned int i;
++
++	for (i = 0; i < g->nr_pins; i++) {
++		struct lstp_gpio_pin *pin = &g->pins[i];
++
++		if (pin->irq_requested) {
++			free_irq(pin->irq, pin);
++			pin->irq_requested = false;
++		}
++		if (pin->desc) {
++			gpiod_put(pin->desc);
++			pin->desc = NULL;
++		}
++	}
++}
++
++static int lstp_gpio_probe(struct lstp_channel *ch)
++{
++	struct lstp_gpio *g;
++	unsigned int count;
++	unsigned int i;
++	int ret;
++
++	count = of_get_available_child_count(ch->np);
++	if (!count) {
++		dev_err(ch->dev->dev, "%pOF: no pin nodes\n", ch->np);
++		return -EINVAL;
++	}
++
++	g = kzalloc(sizeof(*g), GFP_KERNEL);
++	if (!g)
++		return -ENOMEM;
++
++	g->pins = kcalloc(count, sizeof(*g->pins), GFP_KERNEL);
++	if (!g->pins) {
++		kfree(g);
++		return -ENOMEM;
++	}
++
++	g->ch = ch;
++	g->nr_pins = count;
++	mutex_init(&g->lock);
++	ch->priv = g;
++
++	for_each_available_child_of_node_scoped(ch->np, np) {
++		ret = lstp_gpio_parse_pin(g, np);
++		if (ret)
++			goto err;
++	}
++
++	for (i = 0; i < count; i++) {
++		if (!g->pins[i].desc) {
++			dev_err(ch->dev->dev, "%pOF: pin index %u missing\n",
++				ch->np, i);
++			ret = -EINVAL;
++			goto err;
++		}
++	}
++
++	return 0;
++
++err:
++	lstp_gpio_release_pins(g);
++	kfree(g->pins);
++	kfree(g);
++	ch->priv = NULL;
++	return ret;
++}
++
++static void lstp_gpio_remove(struct lstp_channel *ch)
++{
++	struct lstp_gpio *g = ch->priv;
++
++	if (!g)
++		return;
++
++	lstp_gpio_release_pins(g);
++	kfree(g->pins);
++	kfree(g);
++	ch->priv = NULL;
++}
++
++bool lstp_gpio_channel_unlocked(struct lstp_channel *ch)
++{
++	struct lstp_gpio *g = ch->priv;
++	unsigned int i;
++
++	if (!g)
++		return false;
++
++	for (i = 0; i < g->nr_pins; i++)
++		if (g->pins[i].allow_direction_control)
++			return true;
++
++	return false;
++}
++
++/* ------------------------------------------------------------------ */
++/* Interrupts								*/
++/* ------------------------------------------------------------------ */
++
++static irqreturn_t lstp_gpio_irq_thread(int irq, void *data)
++{
++	struct lstp_gpio_pin *pin = data;
++	struct lstp_channel *ch = pin->gpio->ch;
++	struct lstp_gpio_irq_event event;
++	u8 config = READ_ONCE(pin->irq_config);
++	int value;
++
++	value = gpiod_get_value_cansleep(pin->desc);
++	if (value < 0)
++		return IRQ_HANDLED;
++
++	/* Same edge filtering the OpenSMA implementation applies. */
++	if (value && config != LSTP_GPIO_IRQ_RISING &&
++	    config != LSTP_GPIO_IRQ_BOTH_EDGE && config != LSTP_GPIO_IRQ_HIGH)
++		return IRQ_HANDLED;
++	if (!value && config != LSTP_GPIO_IRQ_FALLING &&
++	    config != LSTP_GPIO_IRQ_BOTH_EDGE && config != LSTP_GPIO_IRQ_LOW)
++		return IRQ_HANDLED;
++
++	if (!lstp_online(ch->dev))
++		return IRQ_HANDLED;
++
++	event.gpio_index = cpu_to_le16(pin->index);
++	event.value = value ? LSTP_GPIO_HIGH : LSTP_GPIO_LOW;
++
++	lstp_send_msg(ch->dev, ch->id, LSTP_GPIO_IRQ_EVENT, &event,
++		      sizeof(event));
++
++	return IRQ_HANDLED;
++}
++
++/* Caller holds gpio->lock. */
++static void lstp_gpio_irq_release(struct lstp_gpio_pin *pin)
++{
++	if (pin->irq_requested) {
++		free_irq(pin->irq, pin);
++		pin->irq_requested = false;
++	}
++	WRITE_ONCE(pin->irq_config, LSTP_GPIO_IRQ_DISABLED);
++}
++
++static int lstp_gpio_irq_configure(struct lstp_gpio_pin *pin, u8 type)
++{
++	unsigned long trigger;
++	int ret;
++
++	guard(mutex)(&pin->gpio->lock);
++
++	lstp_gpio_irq_release(pin);
++
++	switch (type) {
++	case LSTP_GPIO_IRQ_DISABLED:
++		return 0;
++	case LSTP_GPIO_IRQ_RISING:
++		trigger = IRQF_TRIGGER_RISING;
++		break;
++	case LSTP_GPIO_IRQ_FALLING:
++		trigger = IRQF_TRIGGER_FALLING;
++		break;
++	case LSTP_GPIO_IRQ_BOTH_EDGE:
++		trigger = IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING;
++		break;
++	default:
++		/*
++		 * A level trigger would re-fire for as long as the level is
++		 * held, which this push-on-change transport cannot express.
++		 */
++		return -EOPNOTSUPP;
++	}
++
++	WRITE_ONCE(pin->irq_config, type);
++
++	ret = request_threaded_irq(pin->irq, NULL, lstp_gpio_irq_thread,
++				   trigger | IRQF_ONESHOT, pin->irq_name, pin);
++	if (ret) {
++		WRITE_ONCE(pin->irq_config, LSTP_GPIO_IRQ_DISABLED);
++		return ret;
++	}
++
++	pin->irq_requested = true;
++
++	return 0;
++}
++
++static void lstp_gpio_reset(struct lstp_channel *ch)
++{
++	struct lstp_gpio *g = ch->priv;
++	unsigned int i;
++
++	if (!g)
++		return;
++
++	guard(mutex)(&g->lock);
++
++	for (i = 0; i < g->nr_pins; i++)
++		lstp_gpio_irq_release(&g->pins[i]);
++}
++
++/* ------------------------------------------------------------------ */
++/* Management channel configuration					*/
++/* ------------------------------------------------------------------ */
++
++static int lstp_gpio_read_config(struct lstp_channel *ch, u16 offset, u16 length,
++				 u8 *out, size_t out_max)
++{
++	struct lstp_gpio *g = ch->priv;
++	size_t max_off = LSTP_GPIO_CFG_HDR + g->nr_pins * LSTP_GPIO_CFG_PIN;
++	size_t written = 0;
++	size_t off = offset;
++	unsigned int pin;
++	size_t len;
++	size_t end;
++
++	if (off > max_off)
++		return -EINVAL;
++
++	/* A length of zero asks for as much as fits in one response. */
++	len = min3((size_t)(length ? length : out_max), max_off - off, out_max);
++	if (!len)
++		return 0;
++
++	end = off + len;
++	pin = (off <= LSTP_GPIO_CFG_HDR) ? 0 :
++	      (off - LSTP_GPIO_CFG_HDR) / LSTP_GPIO_CFG_PIN;
++
++	if (offset == 0) {
++		struct lstp_gpio_channel_config *cc = (void *)out;
++		size_t whole;
++
++		cc->num_gpio = g->nr_pins;
++		written = LSTP_GPIO_CFG_HDR;
++		off += LSTP_GPIO_CFG_HDR;
++
++		/* Only whole pin records follow the channel header. */
++		whole = ((len - LSTP_GPIO_CFG_HDR) / LSTP_GPIO_CFG_PIN) *
++			LSTP_GPIO_CFG_PIN;
++		end = LSTP_GPIO_CFG_HDR + whole;
++	}
++
++	for (; pin < g->nr_pins; pin++) {
++		size_t start = LSTP_GPIO_CFG_HDR + pin * LSTP_GPIO_CFG_PIN;
++		struct lstp_gpio_config cfg;
++		size_t from, to;
++		int dir;
++
++		if (start >= end)
++			break;
++		if (start + LSTP_GPIO_CFG_PIN <= off)
++			continue;
++
++		from = (off > start) ? off - start : 0;
++		to = min(LSTP_GPIO_CFG_PIN, end - start);
++		if (to <= from)
++			continue;
++
++		cfg = g->pins[pin].cfg;
++		dir = gpiod_get_direction(g->pins[pin].desc);
++		if (dir < 0)
++			return dir;
++		cfg.direction = dir ? LSTP_GPIO_INPUT : LSTP_GPIO_OUTPUT;
++
++		memcpy(out + written, (const u8 *)&cfg + from, to - from);
++		written += to - from;
++	}
++
++	return written;
++}
++
++static int lstp_gpio_write_config(struct lstp_channel *ch, const u8 *req,
++				  size_t len)
++{
++	const struct lstp_hdr *hdr = (const struct lstp_hdr *)req;
++	const struct lstp_config_write_req *wr;
++	struct lstp_gpio *g = ch->priv;
++	size_t min_payload = sizeof(struct lstp_config_write_req) +
++			     sizeof(struct lstp_config_blob);
++	size_t max_off = LSTP_GPIO_CFG_HDR + g->nr_pins * LSTP_GPIO_CFG_PIN;
++	size_t payload_len = lstp_hdr_payload_len(hdr);
++	unsigned int pin;
++	size_t cfg_len;
++	size_t offset;
++	size_t cur;
++	size_t end;
++	int ret = 0;
++
++	if (!lstp_gpio_channel_unlocked(ch))
++		return -EOPNOTSUPP;
++
++	if (payload_len < min_payload)
++		return -EINVAL;
++	cfg_len = payload_len - min_payload;
++
++	wr = (const struct lstp_config_write_req *)(req + LSTP_HDR_LEN);
++	offset = le16_to_cpu(wr->offset);
++
++	if (offset > max_off || cfg_len > max_off - offset)
++		return -EINVAL;
++	if (!cfg_len)
++		return 0;
++
++	end = offset + cfg_len;
++	pin = (offset <= LSTP_GPIO_CFG_HDR) ? 0 :
++	      (offset - LSTP_GPIO_CFG_HDR) / LSTP_GPIO_CFG_PIN;
++	cur = offset ? offset : LSTP_GPIO_CFG_HDR;
++
++	/* Only the direction field is honoured; the rest is board policy. */
++	for (; pin < g->nr_pins; pin++) {
++		struct lstp_gpio_pin *p = &g->pins[pin];
++		size_t dir_byte = LSTP_GPIO_CFG_HDR +
++				  pin * LSTP_GPIO_CFG_PIN +
++				  offsetof(struct lstp_gpio_config, direction);
++		u8 want;
++		int have;
++
++		if (dir_byte >= end)
++			break;
++		if (dir_byte < cur)
++			continue;
++
++		want = req[LSTP_HDR_LEN + min_payload + (dir_byte - offset)];
++		if (want != LSTP_GPIO_OUTPUT && want != LSTP_GPIO_INPUT)
++			return -EINVAL;
++
++		have = gpiod_get_direction(p->desc);
++		if (have < 0)
++			return have;
++		if ((have ? LSTP_GPIO_INPUT : LSTP_GPIO_OUTPUT) == want)
++			continue;
++
++		if (!p->allow_direction_control) {
++			dev_dbg(ch->dev->dev,
++				"gpio %u: direction control not allowed\n", pin);
++			ret = -EOPNOTSUPP;
++			continue;
++		}
++
++		if (want == LSTP_GPIO_OUTPUT) {
++			/* An interrupt on a driven line is meaningless. */
++			scoped_guard(mutex, &g->lock)
++				lstp_gpio_irq_release(p);
++
++			ret = gpiod_direction_output(p->desc,
++						     p->cfg.default_output);
++		} else {
++			ret = gpiod_direction_input(p->desc);
++		}
++		if (ret)
++			dev_dbg(ch->dev->dev,
++				"gpio %u: direction change failed: %d\n",
++				pin, ret);
++	}
++
++	return ret;
++}
++
++/* ------------------------------------------------------------------ */
++/* Requests								*/
++/* ------------------------------------------------------------------ */
++
++static int lstp_gpio_reply(struct lstp_channel *ch, u8 *resp, size_t len)
++{
++	struct lstp_hdr *hdr = (struct lstp_hdr *)resp;
++
++	hdr->channel_id = ch->id;
++	hdr->cmd_status_code = LSTP_ST_SUCCESS | LSTP_RESPONSE_BIT;
++	lstp_hdr_set_payload_len(hdr, len - LSTP_HDR_LEN);
++
++	return lstp_bridge_send(ch->dev, resp, len);
++}
++
++static int lstp_gpio_get_values(struct lstp_channel *ch, const u8 *req,
++				size_t len, u8 *resp)
++{
++	struct lstp_gpio *g = ch->priv;
++	size_t off = LSTP_HDR_LEN;
++	size_t resp_off = LSTP_HDR_LEN;
++
++	while (off + sizeof(struct lstp_gpio_get_value_req) <= len) {
++		const struct lstp_gpio_get_value_req *r = (const void *)(req + off);
++		u16 index = le16_to_cpu(r->gpio_index);
++		int value;
++
++		off += sizeof(*r);
++
++		if (index >= g->nr_pins)
++			return -EINVAL;
++		if (resp_off + sizeof(struct lstp_gpio_get_value_resp) >
++		    LSTP_MSG_SIZE)
++			return -EINVAL;
++
++		value = gpiod_get_value_cansleep(g->pins[index].desc);
++		if (value < 0)
++			return value;
++
++		resp[resp_off++] = value ? LSTP_GPIO_HIGH : LSTP_GPIO_LOW;
++	}
++
++	return lstp_gpio_reply(ch, resp, resp_off);
++}
++
++static int lstp_gpio_set_values(struct lstp_channel *ch, const u8 *req,
++				size_t len, u8 *resp)
++{
++	struct lstp_gpio *g = ch->priv;
++	size_t off = LSTP_HDR_LEN;
++
++	while (off + sizeof(struct lstp_gpio_set_value_req) <= len) {
++		const struct lstp_gpio_set_value_req *r = (const void *)(req + off);
++		u16 index = le16_to_cpu(r->gpio_index);
++		int dir;
++
++		off += sizeof(*r);
++
++		if (index >= g->nr_pins)
++		{
++			return -EINVAL;
++		}
++		if (r->value != LSTP_GPIO_LOW && r->value != LSTP_GPIO_HIGH)
++		{
++			return -EINVAL;
++		}
++
++		dir = gpiod_get_direction(g->pins[index].desc);
++		if (dir < 0)
++		{
++			return dir;
++		}
++		if (dir)
++		{
++			return -EINVAL;	/* not an output */
++		}
++
++		gpiod_set_value_cansleep(g->pins[index].desc, r->value);
++	}
++
++	return lstp_gpio_reply(ch, resp, LSTP_HDR_LEN);
++}
++
++static int lstp_gpio_get_irq_config(struct lstp_channel *ch, const u8 *req,
++				    size_t len, u8 *resp)
++{
++	struct lstp_gpio *g = ch->priv;
++	const struct lstp_gpio_get_irq_config_req *r;
++	u16 index;
++
++	if (LSTP_HDR_LEN + sizeof(*r) > len)
++		return -EINVAL;
++
++	r = (const void *)(req + LSTP_HDR_LEN);
++	index = le16_to_cpu(r->gpio_index);
++	if (index >= g->nr_pins)
++		return -EINVAL;
++
++	resp[LSTP_HDR_LEN] = READ_ONCE(g->pins[index].irq_config);
++
++	return lstp_gpio_reply(ch, resp, LSTP_HDR_LEN + 1);
++}
++
++static int lstp_gpio_set_irq_config(struct lstp_channel *ch, const u8 *req,
++				    size_t len, u8 *resp)
++{
++	struct lstp_gpio *g = ch->priv;
++	const struct lstp_gpio_irq_config_req *r;
++	struct lstp_gpio_pin *pin;
++	u16 index;
++	int dir;
++	int ret;
++
++	if (LSTP_HDR_LEN + sizeof(*r) > len)
++		return -EINVAL;
++
++	r = (const void *)(req + LSTP_HDR_LEN);
++	index = le16_to_cpu(r->gpio_index);
++	if (index >= g->nr_pins || r->irq_type > LSTP_GPIO_IRQ_MAX)
++		return -EINVAL;
++
++	pin = &g->pins[index];
++	if (!pin->allow_set_irq)
++		return -EOPNOTSUPP;
++
++	dir = gpiod_get_direction(pin->desc);
++	if (dir < 0)
++		return dir;
++	if (!dir)
++		return -EINVAL;	/* not an input */
++
++	ret = lstp_gpio_irq_configure(pin, r->irq_type);
++	if (ret)
++		return ret;
++
++	return lstp_gpio_reply(ch, resp, LSTP_HDR_LEN);
++}
++
++static int lstp_gpio_receive(struct lstp_channel *ch, const u8 *req, size_t len)
++{
++	const struct lstp_hdr *hdr = (const struct lstp_hdr *)req;
++	u8 *resp;
++	int ret;
++
++	if (hdr->cmd_status_code & LSTP_RESPONSE_BIT)
++		return 0;
++
++	resp = kzalloc(LSTP_MSG_SIZE, GFP_KERNEL);
++	if (!resp)
++		return -ENOMEM;
++
++	switch (hdr->cmd_status_code & LSTP_GPIO_CMD_MASK) {
++	case LSTP_GPIO_GET_VALUE:
++		ret = lstp_gpio_get_values(ch, req, len, resp);
++		break;
++	case LSTP_GPIO_SET_VALUE:
++		ret = lstp_gpio_set_values(ch, req, len, resp);
++		break;
++	case LSTP_GPIO_GET_IRQ_CONFIG:
++		ret = lstp_gpio_get_irq_config(ch, req, len, resp);
++		break;
++	case LSTP_GPIO_SET_IRQ_CONFIG:
++		ret = lstp_gpio_set_irq_config(ch, req, len, resp);
++		break;
++	default:
++		ret = -EOPNOTSUPP;
++		break;
++	}
++
++	kfree(resp);
++
++	return ret;
++}
++
++const struct lstp_channel_ops lstp_gpio_ops = {
++	.probe		= lstp_gpio_probe,
++	.remove		= lstp_gpio_remove,
++	.reset		= lstp_gpio_reset,
++	.receive	= lstp_gpio_receive,
++	.read_config	= lstp_gpio_read_config,
++	.write_config	= lstp_gpio_write_config,
++};
+diff --git a/drivers/usb/misc/lstp_bridge/lstp-i2c.c b/drivers/usb/misc/lstp_bridge/lstp-i2c.c
+new file mode 100644
+index 000000000000..ea89afe32ba9
+--- /dev/null
++++ b/drivers/usb/misc/lstp_bridge/lstp-i2c.c
+@@ -0,0 +1,330 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * LSTP I2C channel, backed by a Linux i2c adapter.
++ *
++ * The address carried by the protocol is a 7 bit I2C address, matching the
++ * slaveAddress field the OpenSMA firmware hands to its LPI2C master.
++ *
++ * Copyright (c) 2026 Axiado Corporation
++ */
++
++#include <linux/errno.h>
++#include <linux/i2c.h>
++#include <linux/of.h>
++#include <linux/slab.h>
++
++#include "lstp.h"
++
++struct lstp_i2c {
++	struct i2c_adapter *adap;
++	u8 speed;
++};
++
++static u8 lstp_i2c_speed_from_hz(u32 hz)
++{
++	if (hz <= 100000)
++		return LSTP_I2C_STANDARD;
++	if (hz <= 400000)
++		return LSTP_I2C_FAST;
++	if (hz <= 1000000)
++		return LSTP_I2C_FAST_PLUS;
++
++	return LSTP_I2C_HIGH;
++}
++
++static int lstp_i2c_probe(struct lstp_channel *ch)
++{
++	struct device_node *parent;
++	struct lstp_i2c *i2c;
++	u32 hz;
++
++	parent = of_parse_phandle(ch->np, "i2c-parent", 0);
++	if (!parent) {
++		dev_err(ch->dev->dev, "%pOF: missing i2c-parent\n", ch->np);
++		return -EINVAL;
++	}
++
++	i2c = kzalloc(sizeof(*i2c), GFP_KERNEL);
++	if (!i2c) {
++		of_node_put(parent);
++		return -ENOMEM;
++	}
++
++	i2c->adap = of_get_i2c_adapter_by_node(parent);
++	if (!i2c->adap) {
++		of_node_put(parent);
++		kfree(i2c);
++		return -EPROBE_DEFER;
++	}
++
++	if (of_property_read_u32(ch->np, "nvidia,i2c-speed", &hz) &&
++	    of_property_read_u32(parent, "clock-frequency", &hz))
++		hz = 100000;
++	i2c->speed = lstp_i2c_speed_from_hz(hz);
++
++	of_node_put(parent);
++	ch->priv = i2c;
++
++	return 0;
++}
++
++static void lstp_i2c_remove(struct lstp_channel *ch)
++{
++	struct lstp_i2c *i2c = ch->priv;
++
++	if (!i2c)
++		return;
++
++	i2c_put_adapter(i2c->adap);
++	kfree(i2c);
++	ch->priv = NULL;
++}
++
++static int lstp_i2c_read_config(struct lstp_channel *ch, u16 offset, u16 length,
++				u8 *out, size_t out_max)
++{
++	struct lstp_i2c *i2c = ch->priv;
++	struct lstp_i2c_config *cfg = (struct lstp_i2c_config *)out;
++
++	if (out_max < sizeof(*cfg))
++		return -EINVAL;
++
++	cfg->speed = i2c->speed;
++
++	return sizeof(*cfg);
++}
++
++/* Send a successful response carrying @len bytes of read data. */
++static int lstp_i2c_reply(struct lstp_channel *ch, const u8 *data, u16 len)
++{
++	struct lstp_hdr *hdr;
++	u8 *resp;
++	int ret;
++
++	if (len > LSTP_MAX_PAYLOAD)
++		return -E2BIG;
++
++	resp = kzalloc(LSTP_HDR_LEN + len, GFP_KERNEL);
++	if (!resp)
++		return -ENOMEM;
++
++	hdr = (struct lstp_hdr *)resp;
++	hdr->channel_id = ch->id;
++	hdr->cmd_status_code = LSTP_ST_SUCCESS | LSTP_RESPONSE_BIT;
++	lstp_hdr_set_payload_len(hdr, len);
++	if (len)
++		memcpy(resp + LSTP_HDR_LEN, data, len);
++
++	ret = lstp_bridge_send(ch->dev, resp, LSTP_HDR_LEN + len);
++	kfree(resp);
++
++	return ret;
++}
++
++static int lstp_i2c_quick(struct lstp_channel *ch, u8 addr, char read_write)
++{
++	struct lstp_i2c *i2c = ch->priv;
++	int ret;
++
++	ret = i2c_smbus_xfer(i2c->adap, addr, 0, read_write, 0,
++			     I2C_SMBUS_QUICK, NULL);
++	if (ret < 0)
++		return ret;
++
++	return lstp_i2c_reply(ch, NULL, 0);
++}
++
++static int lstp_i2c_xfer(struct lstp_channel *ch, u8 addr, const u8 *wbuf,
++			 u16 wlen, u16 rlen)
++{
++	struct lstp_i2c *i2c = ch->priv;
++	struct i2c_msg msg[2];
++	unsigned int nr = 0;
++	u8 *rbuf = NULL;
++	u8 *wcopy = NULL;
++	int ret;
++
++	if (rlen > LSTP_MAX_PAYLOAD)
++		return -E2BIG;
++
++	if (wlen) {
++		/* i2c_transfer() takes a writable buffer. */
++		wcopy = kmemdup(wbuf, wlen, GFP_KERNEL);
++		if (!wcopy)
++			return -ENOMEM;
++
++		msg[nr].addr = addr;
++		msg[nr].flags = 0;
++		msg[nr].len = wlen;
++		msg[nr].buf = wcopy;
++		nr++;
++	}
++
++	if (rlen) {
++		rbuf = kzalloc(rlen, GFP_KERNEL);
++		if (!rbuf) {
++			ret = -ENOMEM;
++			goto out;
++		}
++
++		msg[nr].addr = addr;
++		msg[nr].flags = I2C_M_RD;
++		msg[nr].len = rlen;
++		msg[nr].buf = rbuf;
++		nr++;
++	}
++
++	if (!nr) {
++		ret = -EINVAL;
++		goto out;
++	}
++
++	ret = i2c_transfer(i2c->adap, msg, nr);
++	if (ret < 0)
++		goto out;
++	if (ret != (int)nr) {
++		ret = -EIO;
++		goto out;
++	}
++
++	ret = lstp_i2c_reply(ch, rbuf, rlen);
++
++out:
++	kfree(rbuf);
++	kfree(wcopy);
++	return ret;
++}
++
++static int lstp_i2c_smbus_block_read(struct lstp_channel *ch, u8 addr,
++				     u8 command, bool pec)
++{
++	struct lstp_i2c *i2c = ch->priv;
++	union i2c_smbus_data data;
++	int ret;
++
++	memset(&data, 0, sizeof(data));
++
++	ret = i2c_smbus_xfer(i2c->adap, addr, pec ? I2C_CLIENT_PEC : 0,
++			     I2C_SMBUS_READ, command, I2C_SMBUS_BLOCK_DATA,
++			     &data);
++	if (ret < 0)
++		return ret;
++
++	if (data.block[0] > I2C_SMBUS_BLOCK_MAX)
++		return -EIO;
++
++	/*
++	 * Report the block exactly as it arrived on the wire: the length
++	 * byte followed by the payload, which is what a receive-length read
++	 * yields on the OpenSMA side.
++	 */
++	return lstp_i2c_reply(ch, data.block, data.block[0] + 1);
++}
++
++static int lstp_i2c_receive(struct lstp_channel *ch, const u8 *req, size_t len)
++{
++	const struct lstp_hdr *hdr = (const struct lstp_hdr *)req;
++	struct lstp_i2c *i2c = ch->priv;
++	const u8 *payload = req + LSTP_HDR_LEN;
++	u16 payload_len = lstp_hdr_payload_len(hdr);
++	u8 cmd;
++
++	if (hdr->cmd_status_code & LSTP_RESPONSE_BIT)
++		return 0;
++
++	/*
++	 * The protocol can ask for a transfer that is not terminated by a
++	 * STOP condition.  Linux offers no portable way to leave a bus
++	 * mid-transaction, so refuse instead of silently adding a STOP.
++	 */
++	if (hdr->cmd_status_code & LSTP_I2C_NO_STOP)
++		return -EOPNOTSUPP;
++
++	cmd = hdr->cmd_status_code & LSTP_I2C_CMD_MASK;
++
++	switch (cmd) {
++	case LSTP_I2C_BUS_RECOVERY:
++		if (payload_len != 0)
++			return -EINVAL;
++		if (!i2c->adap->bus_recovery_info)
++			return -EOPNOTSUPP;
++		if (i2c_recover_bus(i2c->adap))
++			return -EIO;
++		return lstp_i2c_reply(ch, NULL, 0);
++
++	case LSTP_I2C_READ: {
++		const struct lstp_i2c_read_req *rd = (const void *)payload;
++		u16 rlen;
++
++		if (payload_len < sizeof(*rd))
++			return -EINVAL;
++		if (rd->address > 0x7f)
++			return -EINVAL;
++
++		rlen = le16_to_cpu(rd->read_len);
++		if (!rlen)
++			return lstp_i2c_quick(ch, rd->address, I2C_SMBUS_READ);
++
++		return lstp_i2c_xfer(ch, rd->address, NULL, 0, rlen);
++	}
++
++	case LSTP_I2C_WRITE: {
++		const struct lstp_i2c_write_req *wr = (const void *)payload;
++		u16 wlen;
++
++		if (payload_len < sizeof(*wr))
++			return -EINVAL;
++		if (wr->address > 0x7f)
++			return -EINVAL;
++
++		wlen = payload_len - sizeof(*wr);
++		if (!wlen)
++			return lstp_i2c_quick(ch, wr->address, I2C_SMBUS_WRITE);
++
++		return lstp_i2c_xfer(ch, wr->address, payload + sizeof(*wr),
++				     wlen, 0);
++	}
++
++	case LSTP_I2C_WRITE_READ: {
++		const struct lstp_i2c_write_read_req *wrd = (const void *)payload;
++
++		if (payload_len < sizeof(*wrd))
++			return -EINVAL;
++		if (wrd->address > 0x7f)
++			return -EINVAL;
++
++		return lstp_i2c_xfer(ch, wrd->address, payload + sizeof(*wrd),
++				     payload_len - sizeof(*wrd),
++				     le16_to_cpu(wrd->read_len));
++	}
++
++	case LSTP_I2C_SMBUS_BLOCK_READ: {
++		const struct lstp_i2c_smbus_block_read_req *br =
++			(const void *)payload;
++
++		if (payload_len < sizeof(*br))
++			return -EINVAL;
++		if (br->address > 0x7f)
++			return -EINVAL;
++		/* Exactly one command byte, as SMBus block read defines. */
++		if (payload_len - sizeof(*br) != 1)
++			return -EOPNOTSUPP;
++
++		return lstp_i2c_smbus_block_read(ch, br->address,
++						 payload[sizeof(*br)],
++						 le16_to_cpu(br->include_smbus_pec) != 0);
++	}
++
++	/* Deprecated in the protocol; the SMBus block read replaces it. */
++	case LSTP_I2C_READ_RECV_LEN:
++	default:
++		return -EOPNOTSUPP;
++	}
++}
++
++const struct lstp_channel_ops lstp_i2c_ops = {
++	.probe		= lstp_i2c_probe,
++	.remove		= lstp_i2c_remove,
++	.receive	= lstp_i2c_receive,
++	.read_config	= lstp_i2c_read_config,
++};
+diff --git a/drivers/usb/misc/lstp_bridge/lstp-mgmt.c b/drivers/usb/misc/lstp_bridge/lstp-mgmt.c
+new file mode 100644
+index 000000000000..7f6dd1bfd304
+--- /dev/null
++++ b/drivers/usb/misc/lstp_bridge/lstp-mgmt.c
+@@ -0,0 +1,188 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * LSTP management channel (channel 0): channel enumeration, per channel
++ * configuration read/write and the configuration lock state.
++ *
++ * Copyright (c) 2026 Axiado Corporation
++ */
++
++#include <linux/errno.h>
++#include <linux/slab.h>
++#include <linux/string.h>
++
++#include "lstp.h"
++
++#define LSTP_MGMT_CFG_MAX	(LSTP_MAX_PAYLOAD - sizeof(struct lstp_config_blob))
++
++static int lstp_mgmt_read_config(struct lstp_channel *ch, u16 offset,
++				 u16 length, u8 *out, size_t out_max)
++{
++	struct lstp_mgmt_config *cfg = (struct lstp_mgmt_config *)out;
++
++	if (out_max < sizeof(*cfg))
++		return -EINVAL;
++
++	cfg->lstp_version = LSTP_VERSION;
++	/* The management channel itself is not counted. */
++	cfg->num_channels = ch->dev->nr_channels - 1;
++
++	return sizeof(*cfg);
++}
++
++static int lstp_mgmt_do_read_config(struct lstp_channel *ch, const u8 *req,
++				    size_t len)
++{
++	const struct lstp_hdr *req_hdr = (const struct lstp_hdr *)req;
++	const struct lstp_config_read_req *rd;
++	struct lstp_dev *dev = ch->dev;
++	struct lstp_config_blob *blob;
++	struct lstp_channel *target;
++	struct lstp_hdr *hdr;
++	size_t off;
++	u8 *resp;
++	int ret;
++
++	if (lstp_hdr_payload_len(req_hdr) < sizeof(*rd))
++		return -EINVAL;
++
++	rd = (const struct lstp_config_read_req *)(req + LSTP_HDR_LEN);
++	if (rd->channel_id >= dev->nr_channels)
++		return -EINVAL;
++
++	target = &dev->channels[rd->channel_id];
++	if (!target->ops || !target->ops->read_config)
++		return -EOPNOTSUPP;
++
++	resp = kzalloc(LSTP_MSG_SIZE, GFP_KERNEL);
++	if (!resp)
++		return -ENOMEM;
++
++	hdr = (struct lstp_hdr *)resp;
++	off = LSTP_HDR_LEN;
++
++	blob = (struct lstp_config_blob *)(resp + off);
++	off += sizeof(*blob);
++
++	blob->channel_type = target->type;
++	blob->channel_enabled = target->enabled;
++	memcpy(blob->channel_name, target->name, sizeof(blob->channel_name));
++
++	ret = target->ops->read_config(target, le16_to_cpu(rd->offset),
++				       le16_to_cpu(rd->length), resp + off,
++				       LSTP_MGMT_CFG_MAX);
++	if (ret < 0)
++		goto out;
++	off += ret;
++
++	/* The response is reported on the management channel, not the target. */
++	hdr->channel_id = req_hdr->channel_id;
++	hdr->cmd_status_code = LSTP_ST_SUCCESS | LSTP_RESPONSE_BIT;
++	lstp_hdr_set_payload_len(hdr, off - LSTP_HDR_LEN);
++
++	ret = lstp_bridge_send(dev, resp, off);
++out:
++	kfree(resp);
++	return ret < 0 ? ret : 0;
++}
++
++static int lstp_mgmt_do_write_config(struct lstp_channel *ch, const u8 *req,
++				     size_t len)
++{
++	const struct lstp_hdr *req_hdr = (const struct lstp_hdr *)req;
++	const struct lstp_config_write_req *wr;
++	const struct lstp_config_blob *blob;
++	struct lstp_dev *dev = ch->dev;
++	struct lstp_channel *target;
++	size_t payload_len;
++	size_t cfg_size;
++	int ret;
++
++	payload_len = lstp_hdr_payload_len(req_hdr);
++	if (payload_len < sizeof(*wr))
++		return -EINVAL;
++	cfg_size = payload_len - sizeof(*wr);
++
++	wr = (const struct lstp_config_write_req *)(req + LSTP_HDR_LEN);
++	if (wr->channel_id >= dev->nr_channels)
++		return -EINVAL;
++
++	target = &dev->channels[wr->channel_id];
++	blob = (const struct lstp_config_blob *)(req + LSTP_HDR_LEN +
++						 sizeof(*wr));
++
++	/*
++	 * A request too short to even carry the type is acknowledged without
++	 * doing anything, matching the OpenSMA implementation.
++	 */
++	if (cfg_size < sizeof(blob->channel_type))
++		goto ack;
++
++	if (blob->channel_type != target->type)
++		return -EINVAL;
++
++	if (cfg_size < offsetofend(struct lstp_config_blob, channel_enabled))
++		goto ack;
++
++	if (!!blob->channel_enabled != target->enabled)
++		return -EOPNOTSUPP;
++
++	if (target->ops && target->ops->write_config) {
++		ret = target->ops->write_config(target, req, len);
++		if (ret)
++			return ret;
++	}
++
++ack:
++	return lstp_send_msg(dev, req_hdr->channel_id,
++			     LSTP_ST_SUCCESS | LSTP_RESPONSE_BIT, NULL, 0);
++}
++
++static int lstp_mgmt_do_read_lock(struct lstp_channel *ch, const u8 *req,
++				  size_t len)
++{
++	const struct lstp_hdr *req_hdr = (const struct lstp_hdr *)req;
++	struct lstp_dev *dev = ch->dev;
++	u8 state = LSTP_LOCKED;
++	unsigned int i;
++
++	if (lstp_hdr_payload_len(req_hdr) != 0)
++		return -EINVAL;
++
++	for (i = 0; i < dev->nr_channels; i++) {
++		if (dev->channels[i].type == LSTP_CH_GPIO &&
++		    lstp_gpio_channel_unlocked(&dev->channels[i])) {
++			state = LSTP_UNLOCKED;
++			break;
++		}
++	}
++
++	return lstp_send_msg(dev, req_hdr->channel_id,
++			     LSTP_ST_SUCCESS | LSTP_RESPONSE_BIT,
++			     &state, sizeof(state));
++}
++
++static int lstp_mgmt_receive(struct lstp_channel *ch, const u8 *req, size_t len)
++{
++	const struct lstp_hdr *hdr = (const struct lstp_hdr *)req;
++
++	/* Never answer a response. */
++	if (hdr->cmd_status_code & LSTP_RESPONSE_BIT)
++		return 0;
++
++	switch (hdr->cmd_status_code) {
++	case LSTP_MGMT_READ_CONFIG:
++		return lstp_mgmt_do_read_config(ch, req, len);
++	case LSTP_MGMT_WRITE_CONFIG:
++		return lstp_mgmt_do_write_config(ch, req, len);
++	case LSTP_MGMT_READ_LOCK:
++		return lstp_mgmt_do_read_lock(ch, req, len);
++	case LSTP_MGMT_LOCK:
++	default:
++		return -EOPNOTSUPP;
++	}
++}
++
++const struct lstp_channel_ops lstp_mgmt_ops = {
++	.receive	= lstp_mgmt_receive,
++	.read_config	= lstp_mgmt_read_config,
++};
+diff --git a/drivers/usb/misc/lstp_bridge/lstp-spi.c b/drivers/usb/misc/lstp_bridge/lstp-spi.c
+new file mode 100644
+index 000000000000..d0e6dfcb02fc
+--- /dev/null
++++ b/drivers/usb/misc/lstp_bridge/lstp-spi.c
+@@ -0,0 +1,527 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * LSTP SPI channel, backed by Linux spi devices.
++ *
++ * The protocol lets the host drive chip select independently of the data
++ * phases: one message may assert CS, another transfer data, and a third
++ * release CS.  Two ways of expressing that are supported:
++ *
++ *   nvidia,cs-gpios present - the chip selects are driven from this driver,
++ *	the spi device is put in SPI_NO_CS mode and the bus is held locked
++ *	for as long as a chip select is asserted.  This mirrors the OpenSMA
++ *	firmware, which bit-bangs CS over GPIO.
++ *
++ *   nvidia,cs-gpios absent - one spi device per chip select and the spi
++ *	core is asked to leave CS asserted between messages using
++ *	spi_transfer.cs_change.  Needs a controller that honours cs_change
++ *	on the last transfer of a message.
++ *
++ * Copyright (c) 2026 Axiado Corporation
++ */
++
++#include <linux/errno.h>
++#include <linux/gpio/consumer.h>
++#include <linux/list.h>
++#include <linux/mutex.h>
++#include <linux/of.h>
++#include <linux/property.h>
++#include <linux/slab.h>
++#include <linux/spi/spi.h>
++#include <linux/unaligned.h>
++
++#include "lstp.h"
++
++/* ------------------------------------------------------------------ */
++/* spi_driver used to resolve "spi" phandles				*/
++/* ------------------------------------------------------------------ */
++
++struct lstp_spi_slave {
++	struct list_head list;
++	struct spi_device *spi;
++};
++
++static LIST_HEAD(lstp_spi_slaves);
++static DEFINE_MUTEX(lstp_spi_slaves_lock);
++
++static int lstp_spi_slave_probe(struct spi_device *spi)
++{
++	struct lstp_spi_slave *slave;
++
++	slave = devm_kzalloc(&spi->dev, sizeof(*slave), GFP_KERNEL);
++	if (!slave)
++		return -ENOMEM;
++
++	slave->spi = spi;
++	spi_set_drvdata(spi, slave);
++
++	mutex_lock(&lstp_spi_slaves_lock);
++	list_add_tail(&slave->list, &lstp_spi_slaves);
++	mutex_unlock(&lstp_spi_slaves_lock);
++
++	return 0;
++}
++
++static void lstp_spi_slave_remove(struct spi_device *spi)
++{
++	struct lstp_spi_slave *slave = spi_get_drvdata(spi);
++
++	mutex_lock(&lstp_spi_slaves_lock);
++	list_del(&slave->list);
++	mutex_unlock(&lstp_spi_slaves_lock);
++}
++
++static const struct of_device_id lstp_spi_slave_of_match[] = {
++	{ .compatible = "nvidia,lstp-spi" },
++	{ }
++};
++MODULE_DEVICE_TABLE(of, lstp_spi_slave_of_match);
++
++static struct spi_driver lstp_spi_slave_driver = {
++	.driver = {
++		.name = "lstp-spi",
++		.of_match_table = lstp_spi_slave_of_match,
++	},
++	.probe = lstp_spi_slave_probe,
++	.remove = lstp_spi_slave_remove,
++};
++
++int lstp_spi_driver_register(void)
++{
++	return spi_register_driver(&lstp_spi_slave_driver);
++}
++
++void lstp_spi_driver_unregister(void)
++{
++	spi_unregister_driver(&lstp_spi_slave_driver);
++}
++
++static struct spi_device *lstp_spi_find(struct device_node *np)
++{
++	struct lstp_spi_slave *slave;
++	struct spi_device *spi = NULL;
++
++	mutex_lock(&lstp_spi_slaves_lock);
++	list_for_each_entry(slave, &lstp_spi_slaves, list) {
++		if (slave->spi->dev.of_node == np) {
++			spi = slave->spi;
++			break;
++		}
++	}
++	mutex_unlock(&lstp_spi_slaves_lock);
++
++	return spi;
++}
++
++/* ------------------------------------------------------------------ */
++/* Channel								*/
++/* ------------------------------------------------------------------ */
++
++/* Upper bound on a single SPI Read command, in bytes. */
++#define LSTP_SPI_MAX_READ	(16 * 1024 * 1024)
++
++struct lstp_spi {
++	struct lstp_channel *ch;
++	struct spi_device *spi[LSTP_SPI_MAX_CS];
++	struct gpio_desc *cs[LSTP_SPI_MAX_CS];
++	unsigned int nr_spi;
++	unsigned int nr_cs;	/* number of cs gpios actually acquired */
++	bool gpio_cs;
++	bool bus_locked;
++	u8 *txbuf;
++	u8 *rxbuf;
++};
++
++static struct spi_controller *lstp_spi_ctlr(struct lstp_spi *s)
++{
++	return s->spi[0]->controller;
++}
++
++/* Chip selects the host is told about: our gpios, or one per spi device. */
++static unsigned int lstp_spi_num_cs(struct lstp_spi *s)
++{
++	return s->gpio_cs ? s->nr_cs : s->nr_spi;
++}
++
++static void lstp_spi_bus_release(struct lstp_spi *s)
++{
++	if (s->bus_locked) {
++		spi_bus_unlock(lstp_spi_ctlr(s));
++		s->bus_locked = false;
++	}
++}
++
++static void lstp_spi_cs_deassert_all(struct lstp_spi *s)
++{
++	unsigned int i;
++
++	if (s->gpio_cs)
++		for (i = 0; i < s->nr_cs; i++)
++			gpiod_set_value_cansleep(s->cs[i], 0);
++
++	lstp_spi_bus_release(s);
++}
++
++static void lstp_spi_cs_assert(struct lstp_spi *s, unsigned int idx)
++{
++	/*
++	 * Re-asserting an already asserted line toggles it, and only one
++	 * chip select is ever asserted at a time.  Same rule as OpenSMA,
++	 * which keeps the host and the device in sync.
++	 */
++	lstp_spi_cs_deassert_all(s);
++
++	if (!s->bus_locked) {
++		spi_bus_lock(lstp_spi_ctlr(s));
++		s->bus_locked = true;
++	}
++
++	if (s->gpio_cs)
++		gpiod_set_value_cansleep(s->cs[idx], 1);
++}
++
++static void lstp_spi_cs_deassert(struct lstp_spi *s, unsigned int idx)
++{
++	if (s->gpio_cs)
++		gpiod_set_value_cansleep(s->cs[idx], 0);
++
++	lstp_spi_bus_release(s);
++}
++
++static int lstp_spi_xfer(struct lstp_spi *s, unsigned int idx, const void *tx,
++			 void *rx, size_t len, bool keep_cs)
++{
++	struct spi_device *spi = s->gpio_cs ? s->spi[0] : s->spi[idx];
++	struct spi_transfer xfer = {
++		.tx_buf = tx,
++		.rx_buf = rx,
++		.len = len,
++		.cs_change = s->gpio_cs ? 0 : keep_cs,
++	};
++	struct spi_message msg;
++
++	if (!len) {
++		return 0;
++	}
++
++	spi_message_init_with_transfers(&msg, &xfer, 1);
++
++	if (s->bus_locked) {
++		return spi_sync_locked(spi, &msg);
++	}
++
++	return spi_sync(spi, &msg);
++}
++
++static int lstp_spi_probe(struct lstp_channel *ch)
++{
++	struct device *dev = ch->dev->dev;
++	struct lstp_spi *s;
++	unsigned int i;
++	int count;
++	int ret;
++
++	count = of_count_phandle_with_args(ch->np, "spi", NULL);
++	if (count <= 0 || count > LSTP_SPI_MAX_CS) {
++		dev_err(dev, "%pOF: need 1..%u spi phandles\n", ch->np,
++			LSTP_SPI_MAX_CS);
++		return -EINVAL;
++	}
++
++	s = kzalloc(sizeof(*s), GFP_KERNEL);
++	if (!s)
++		return -ENOMEM;
++
++	s->ch = ch;
++
++	for (i = 0; i < count; i++) {
++		struct device_node *np = of_parse_phandle(ch->np, "spi", i);
++		struct spi_device *spi;
++
++		if (!np) {
++			ret = -EINVAL;
++			goto err;
++		}
++
++		spi = lstp_spi_find(np);
++		of_node_put(np);
++		if (!spi) {
++			ret = -EPROBE_DEFER;
++			goto err;
++		}
++		if (i && spi->controller != s->spi[0]->controller) {
++			dev_err(dev, "%pOF: all spi devices must share a controller\n",
++				ch->np);
++			ret = -EINVAL;
++			goto err;
++		}
++
++		/* Keep the device around even if its driver is unbound. */
++		get_device(&spi->dev);
++		s->spi[i] = spi;
++		s->nr_spi++;
++	}
++
++	for (i = 0; i < LSTP_SPI_MAX_CS; i++) {
++		struct gpio_desc *desc;
++
++		/*
++		 * Deliberately not "cs-gpios": gpiolib has a legacy SPI
++		 * quirk keyed on that exact property name which would
++		 * rewrite the polarity behind our back.
++		 */
++		desc = fwnode_gpiod_get_index(of_fwnode_handle(ch->np),
++					      "nvidia,cs", i, GPIOD_OUT_LOW,
++					      "lstp-spi-cs");
++		if (IS_ERR(desc)) {
++			ret = PTR_ERR(desc);
++			if (ret == -ENOENT)
++				break;
++			goto err;
++		}
++
++		s->cs[i] = desc;
++		s->nr_cs++;
++	}
++
++	if (s->nr_cs) {
++		s->gpio_cs = true;
++
++		/*
++		 * The chip selects belong to us, so keep the controller from
++		 * driving its own.  Not every controller can do that; carry
++		 * on without it and let the board description point the
++		 * native chip select somewhere harmless.
++		 */
++		s->spi[0]->mode |= SPI_NO_CS;
++		if (spi_setup(s->spi[0])) {
++			s->spi[0]->mode &= ~SPI_NO_CS;
++			ret = spi_setup(s->spi[0]);
++			if (ret)
++				goto err;
++			dev_warn(dev,
++				 "%pOF: controller lacks SPI_NO_CS, native chip select stays active\n",
++				 ch->np);
++		}
++	}
++
++	s->txbuf = kzalloc(LSTP_MSG_SIZE, GFP_KERNEL);
++	s->rxbuf = kzalloc(LSTP_MSG_SIZE, GFP_KERNEL);
++	if (!s->txbuf || !s->rxbuf) {
++		ret = -ENOMEM;
++		goto err;
++	}
++
++	ch->priv = s;
++
++	return 0;
++
++err:
++	for (i = 0; i < s->nr_cs; i++)
++		gpiod_put(s->cs[i]);
++	for (i = 0; i < s->nr_spi; i++)
++		put_device(&s->spi[i]->dev);
++	kfree(s->txbuf);
++	kfree(s->rxbuf);
++	kfree(s);
++	return ret;
++}
++
++static void lstp_spi_remove(struct lstp_channel *ch)
++{
++	struct lstp_spi *s = ch->priv;
++	unsigned int i;
++
++	if (!s)
++		return;
++
++	lstp_spi_cs_deassert_all(s);
++
++	for (i = 0; i < s->nr_cs; i++)
++		gpiod_put(s->cs[i]);
++	for (i = 0; i < s->nr_spi; i++)
++		put_device(&s->spi[i]->dev);
++
++	kfree(s->txbuf);
++	kfree(s->rxbuf);
++	kfree(s);
++	ch->priv = NULL;
++}
++
++static void lstp_spi_reset(struct lstp_channel *ch)
++{
++	struct lstp_spi *s = ch->priv;
++
++	if (s)
++		lstp_spi_cs_deassert_all(s);
++}
++
++static int lstp_spi_read_config(struct lstp_channel *ch, u16 offset, u16 length,
++				u8 *out, size_t out_max)
++{
++	struct lstp_spi *s = ch->priv;
++	struct lstp_spi_config *cfg = (struct lstp_spi_config *)out;
++
++	if (out_max < sizeof(*cfg))
++		return -EINVAL;
++
++	cfg->channel_num_cs = lstp_spi_num_cs(s);
++	cfg->freq_hz = cpu_to_le32(s->spi[0]->max_speed_hz);
++
++	return sizeof(*cfg);
++}
++
++/* Emit one response carrying @len bytes taken from @data. */
++static int lstp_spi_reply(struct lstp_channel *ch, const u8 *data, u16 len)
++{
++	struct lstp_spi *s = ch->priv;
++	struct lstp_hdr *hdr = (struct lstp_hdr *)s->txbuf;
++
++	if (len > LSTP_MAX_PAYLOAD)
++		return -E2BIG;
++
++	hdr->channel_id = ch->id;
++	hdr->cmd_status_code = LSTP_ST_SUCCESS | LSTP_RESPONSE_BIT;
++	lstp_hdr_set_payload_len(hdr, len);
++	if (len)
++		memmove(s->txbuf + LSTP_HDR_LEN, data, len);
++
++	return lstp_bridge_send(ch->dev, s->txbuf, LSTP_HDR_LEN + len);
++}
++
++/*
++ * Config deasserts every chip select and answers with the configured bus
++ * frequency.  The legacy host driver expects a 12 byte payload of which
++ * only the first four are meaningful.
++ */
++static int lstp_spi_do_config(struct lstp_channel *ch)
++{
++	struct lstp_spi *s = ch->priv;
++	u8 payload[LSTP_SPI_CONFIG_RESP_LEN] = { };
++
++	lstp_spi_cs_deassert_all(s);
++
++	put_unaligned_le32(s->spi[0]->max_speed_hz, payload);
++
++	return lstp_send_msg(ch->dev, ch->id,
++			     LSTP_ST_SUCCESS | LSTP_RESPONSE_BIT, payload,
++			     sizeof(payload));
++}
++
++static int lstp_spi_do_read(struct lstp_channel *ch, unsigned int cs,
++			    const u8 *payload, u16 payload_len, bool keep_cs)
++{
++	struct lstp_spi *s = ch->priv;
++	u32 remaining;
++	int ret;
++
++	if (payload_len < sizeof(u32))
++		return -EINVAL;
++
++	remaining = get_unaligned_le32(payload);
++	if (!remaining)
++		return 0;
++	/*
++	 * Bound the response burst: each chunk is one USB transfer handled
++	 * from this workqueue, so an absurd count would stall the channel.
++	 */
++	if (remaining > LSTP_SPI_MAX_READ)
++		return -E2BIG;
++
++	do {
++		u32 chunk = min_t(u32, remaining, LSTP_MAX_PAYLOAD);
++		bool last = (remaining - chunk) == 0;
++
++		memset(s->rxbuf, 0, chunk);
++		ret = lstp_spi_xfer(s, cs, NULL, s->rxbuf, chunk,
++				    last ? keep_cs : true);
++		if (ret)
++			return ret;
++
++		ret = lstp_spi_reply(ch, s->rxbuf, chunk);
++		if (ret) {
++			lstp_spi_cs_deassert_all(s);
++			return ret;
++		}
++
++		remaining -= chunk;
++	} while (remaining);
++
++	return 0;
++}
++
++static int lstp_spi_receive(struct lstp_channel *ch, const u8 *req, size_t len)
++{
++	const struct lstp_hdr *hdr = (const struct lstp_hdr *)req;
++	const u8 *payload = req + LSTP_HDR_LEN;
++	u16 payload_len = lstp_hdr_payload_len(hdr);
++	struct lstp_spi *s = ch->priv;
++	bool keep_cs;
++	unsigned int cs;
++	u8 cmd;
++	int ret;
++
++	if (hdr->cmd_status_code & LSTP_RESPONSE_BIT)
++		return 0;
++
++	cmd = hdr->cmd_status_code & LSTP_SPI_CMD_MASK;
++	cs = (hdr->cmd_status_code & LSTP_SPI_CS_MASK) ? 1 : 0;
++	keep_cs = !(hdr->cmd_status_code & LSTP_SPI_CS_DEASSERT);
++
++	if (cmd == LSTP_SPI_CONFIG)
++		return lstp_spi_do_config(ch);
++
++	if (cs >= lstp_spi_num_cs(s))
++		return -EINVAL;
++
++	if (hdr->cmd_status_code & LSTP_SPI_CS_ASSERT)
++		lstp_spi_cs_assert(s, cs);
++
++	switch (cmd) {
++	case LSTP_SPI_WRITE: {
++		u8 status = 0;
++
++		ret = lstp_spi_xfer(s, cs, payload, NULL, payload_len, keep_cs);
++		if (!ret)
++			ret = lstp_spi_reply(ch, &status, sizeof(status));
++		break;
++	}
++
++	case LSTP_SPI_READ:
++		ret = lstp_spi_do_read(ch, cs, payload, payload_len, keep_cs);
++		break;
++
++	case LSTP_SPI_WRITE_READ:
++		if (payload_len > LSTP_MAX_PAYLOAD) {
++			ret = -E2BIG;
++			break;
++		}
++		memset(s->rxbuf, 0, payload_len);
++		ret = lstp_spi_xfer(s, cs, payload, s->rxbuf, payload_len,
++				    keep_cs);
++		if (!ret)
++			ret = lstp_spi_reply(ch, s->rxbuf, payload_len);
++		break;
++
++	case LSTP_SPI_POSTED_WRITE:
++		/* Fire and forget: no response is expected. */
++		ret = lstp_spi_xfer(s, cs, payload, NULL, payload_len, keep_cs);
++		break;
++
++	default:
++		ret = -EOPNOTSUPP;
++		break;
++	}
++
++	if (hdr->cmd_status_code & LSTP_SPI_CS_DEASSERT)
++		lstp_spi_cs_deassert(s, cs);
++
++	return ret;
++}
++
++const struct lstp_channel_ops lstp_spi_ops = {
++	.probe		= lstp_spi_probe,
++	.remove		= lstp_spi_remove,
++	.reset		= lstp_spi_reset,
++	.receive	= lstp_spi_receive,
++	.read_config	= lstp_spi_read_config,
++};
+diff --git a/drivers/usb/misc/lstp_bridge/lstp-vuart.c b/drivers/usb/misc/lstp_bridge/lstp-vuart.c
+new file mode 100644
+index 000000000000..27844787d245
+--- /dev/null
++++ b/drivers/usb/misc/lstp_bridge/lstp-vuart.c
+@@ -0,0 +1,982 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * LSTP virtual UART channel: an LSTP UART channel with no UART controller
++ * behind it.
++ *
++ * Copyright (c) 2026 Axiado Corporation
++ */
++
++#include <linux/cleanup.h>
++#include <linux/delay.h>
++#include <linux/errno.h>
++#include <linux/idr.h>
++#include <linux/kfifo.h>
++#include <linux/module.h>
++#include <linux/mutex.h>
++#include <linux/of.h>
++#include <linux/serial.h>
++#include <linux/serial_core.h>
++#include <linux/slab.h>
++#include <linux/spinlock.h>
++#include <linux/string.h>
++#include <linux/termios.h>
++#include <linux/tty.h>
++#include <linux/tty_flip.h>
++#include <linux/workqueue.h>
++
++#include "lstp.h"
++
++/*
++ * One minor per possible virtual UART channel.  Channels are numbered by the
++ * order in which they probe, so a device tree with a single virtual UART
++ * always gets /dev/ttyVUART0.
++ */
++#define LSTP_VUART_PORTS		8
++
++/*
++ * Nothing divides this clock, it only sets the baud_base TIOCGSERIAL reports
++ * and the ceiling ->set_termios() accepts.
++ */
++#define LSTP_VUART_MAX_BAUD		4000000
++#define LSTP_VUART_MIN_BAUD		50
++#define LSTP_VUART_UARTCLK		(16 * LSTP_VUART_MAX_BAUD)
++
++/*
++ * The host answers an unsolicited WRITE straight from its USB RX completion,
++ * so a round trip is a couple of USB microframes.  Anything beyond this means
++ * the host stopped listening.
++ */
++#define LSTP_VUART_PUSH_TIMEOUT_MS	250
++/* A NAK means the host tty buffer is full; give its reader time to drain. */
++#define LSTP_VUART_PUSH_RETRIES		10
++#define LSTP_VUART_PUSH_RETRY_MS	20
++
++/* Distinct from every status that fits in the seven bit status field. */
++#define LSTP_VUART_NO_STATUS		(-1)
++
++struct lstp_vuart {
++	struct lstp_channel *ch;
++	struct uart_port port;
++	struct workqueue_struct *wq;
++	bool port_added;
++
++	struct mutex cfg_lock;		/* serialises configuration changes */
++	struct lstp_uart_config cfg;
++
++	/*
++	 * True between ->startup() and ->shutdown(), i.e. exactly while the
++	 * tty can absorb receive data.  Also what keeps ->receive() away from
++	 * port.state, which only carries a transmit FIFO while open.
++	 */
++	bool rx_enabled;
++	/* Cleared until the channel configuration has shaped a tty termios. */
++	bool termios_seeded;
++
++	/* tty -> host.  All three are guarded by the port lock. */
++	struct work_struct tx_work;
++	unsigned int pending_break;
++	bool tx_overrun;
++	bool tx_busy;
++
++	/* Acknowledgement of the message @tx_work has in flight. */
++	struct completion push_done;
++	int push_status;
++	bool aborted;
++	/* One staged message: header followed by up to LSTP_MAX_PAYLOAD bytes. */
++	u8 tx_msg[LSTP_HDR_LEN + LSTP_MAX_PAYLOAD];
++};
++
++static struct uart_driver lstp_vuart_driver = {
++	.owner		= THIS_MODULE,
++	.driver_name	= "lstp-vuart",
++	.dev_name	= "ttyVUART",
++	.nr		= LSTP_VUART_PORTS,
++};
++
++static DEFINE_IDA(lstp_vuart_lines);
++
++static struct lstp_vuart *to_lstp_vuart(struct uart_port *port)
++{
++	return container_of(port, struct lstp_vuart, port);
++}
++
++/* ------------------------------------------------------------------ */
++/* Configuration							*/
++/* ------------------------------------------------------------------ */
++
++/*
++ * Nothing here is applied to any hardware, so the only thing worth refusing
++ * is a configuration that could not describe a serial link at all.
++ */
++static int lstp_vuart_check_config(struct lstp_channel *ch,
++				   const struct lstp_uart_config *cfg)
++{
++	struct device *dev = ch->dev->dev;
++
++	if (!le32_to_cpu(cfg->speed)) {
++		dev_err(dev, "%pOF: baud rate must not be zero\n", ch->np);
++		return -EINVAL;
++	}
++	if (cfg->data_bits < 5 || cfg->data_bits > 8) {
++		dev_err(dev, "%pOF: %u data bits is not a serial framing\n",
++			ch->np, cfg->data_bits);
++		return -EINVAL;
++	}
++	if (cfg->stop_bits != 1 && cfg->stop_bits != 2) {
++		dev_err(dev, "%pOF: %u stop bits is not a serial framing\n",
++			ch->np, cfg->stop_bits);
++		return -EINVAL;
++	}
++	if (LSTP_UART_PARITY_OF(cfg->parity_flow) > LSTP_UART_PARITY_MAX) {
++		dev_err(dev, "%pOF: parity %u is not defined\n", ch->np,
++			LSTP_UART_PARITY_OF(cfg->parity_flow));
++		return -EINVAL;
++	}
++	if (LSTP_UART_FLOW_OF(cfg->parity_flow) > LSTP_UART_FLOW_MAX) {
++		dev_err(dev, "%pOF: flow control %u is not defined\n", ch->np,
++			LSTP_UART_FLOW_OF(cfg->parity_flow));
++		return -EINVAL;
++	}
++
++	return 0;
++}
++
++static int lstp_vuart_parse_dt_config(struct lstp_channel *ch,
++				      struct lstp_uart_config *cfg)
++{
++	static const char * const parity_names[] = {
++		[LSTP_UART_PARITY_NONE]  = "none",
++		[LSTP_UART_PARITY_ODD]   = "odd",
++		[LSTP_UART_PARITY_EVEN]  = "even",
++		[LSTP_UART_PARITY_MARK]  = "mark",
++		[LSTP_UART_PARITY_SPACE] = "space",
++	};
++	static const char * const flow_names[] = {
++		[LSTP_UART_FLOW_NONE]    = "none",
++		[LSTP_UART_FLOW_XONXOFF] = "xon-xoff",
++		[LSTP_UART_FLOW_RTSCTS]  = "rts-cts",
++		[LSTP_UART_FLOW_DTRDSR]  = "dtr-dsr",
++	};
++	struct device_node *np = ch->np;
++	const char *name;
++	int parity = LSTP_UART_PARITY_NONE;
++	int flow = LSTP_UART_FLOW_NONE;
++	u32 val;
++
++	memset(cfg, 0, sizeof(*cfg));
++
++	if (of_property_read_u32(np, "current-speed", &val))
++		val = 115200;
++	cfg->speed = cpu_to_le32(val);
++
++	if (of_property_read_u32(np, "nvidia,data-bits", &val))
++		val = 8;
++	cfg->data_bits = val;
++
++	if (of_property_read_u32(np, "nvidia,stop-bits", &val))
++		val = 1;
++	cfg->stop_bits = val;
++
++	if (!of_property_read_string(np, "nvidia,parity", &name)) {
++		parity = match_string(parity_names, ARRAY_SIZE(parity_names),
++				      name);
++		if (parity < 0) {
++			dev_err(ch->dev->dev, "%pOF: bad nvidia,parity '%s'\n",
++				np, name);
++			return -EINVAL;
++		}
++	}
++
++	if (!of_property_read_string(np, "nvidia,flow-control", &name)) {
++		flow = match_string(flow_names, ARRAY_SIZE(flow_names), name);
++		if (flow < 0) {
++			dev_err(ch->dev->dev,
++				"%pOF: bad nvidia,flow-control '%s'\n", np,
++				name);
++			return -EINVAL;
++		}
++	}
++
++	cfg->parity_flow = LSTP_UART_PARITY_FLOW(parity, flow);
++
++	/*
++	 * Pad properties of a link that has no pads.  Carried anyway so that a
++	 * host comparing channels does not have to special case this one.
++	 */
++	if (!of_property_read_u32(np, "nvidia,drive-strength-ma", &val))
++		cfg->output_drive_strength = cpu_to_le16(min(val, 0xffffu));
++	if (!of_property_read_u32(np, "nvidia,slew-rate", &val))
++		cfg->slew_rate = cpu_to_le16(min(val, 0xffffu));
++	if (!of_property_read_u32(np, "nvidia,input-debounce-us", &val))
++		cfg->input_debounce_time = cpu_to_le16(min(val, 0xffffu));
++	if (!of_property_read_u32(np, "nvidia,glitch-filter-ns", &val))
++		cfg->glitch_filter_width = cpu_to_le16(min(val, 0xffffu));
++
++	return lstp_vuart_check_config(ch, cfg);
++}
++
++static int lstp_vuart_read_config(struct lstp_channel *ch, u16 offset,
++				  u16 length, u8 *out, size_t out_max)
++{
++	struct lstp_vuart *u = ch->priv;
++
++	if (out_max < sizeof(u->cfg))
++		return -EINVAL;
++
++	guard(mutex)(&u->cfg_lock);
++	memcpy(out, &u->cfg, sizeof(u->cfg));
++
++	return sizeof(u->cfg);
++}
++
++/*
++ * The blob is a fixed size record, so a write that does not cover all of it
++ * is acknowledged but ignored: applying half a configuration would leave the
++ * two ends describing the link differently.
++ */
++static int lstp_vuart_write_config(struct lstp_channel *ch, const u8 *req,
++				   size_t len)
++{
++	const struct lstp_hdr *hdr = (const struct lstp_hdr *)req;
++	size_t head = sizeof(struct lstp_config_write_req) +
++		      sizeof(struct lstp_config_blob);
++	size_t payload_len = lstp_hdr_payload_len(hdr);
++	const struct lstp_config_write_req *wr;
++	struct lstp_vuart *u = ch->priv;
++	struct lstp_uart_config cfg;
++	size_t cfg_len;
++	int ret;
++
++	if (payload_len < head)
++		return -EINVAL;
++	cfg_len = payload_len - head;
++
++	wr = (const struct lstp_config_write_req *)(req + LSTP_HDR_LEN);
++	if (le16_to_cpu(wr->offset) || cfg_len < sizeof(cfg)) {
++		dev_warn(ch->dev->dev,
++			 "%pOF: ignoring partial config write (offset %u, %zu bytes)\n",
++			 ch->np, le16_to_cpu(wr->offset), cfg_len);
++		return 0;
++	}
++
++	memcpy(&cfg, req + LSTP_HDR_LEN + head, sizeof(cfg));
++
++	ret = lstp_vuart_check_config(ch, &cfg);
++	if (ret)
++		return ret;
++
++	guard(mutex)(&u->cfg_lock);
++	u->cfg = cfg;
++
++	dev_info(ch->dev->dev, "%pOF: host set %u baud, %u%c%u, flow control %u\n",
++		 ch->np, le32_to_cpu(cfg.speed), cfg.data_bits,
++		 "NOEMS"[LSTP_UART_PARITY_OF(cfg.parity_flow)], cfg.stop_bits,
++		 LSTP_UART_FLOW_OF(cfg.parity_flow));
++
++	return 0;
++}
++
++/* ------------------------------------------------------------------ */
++/* tty -> host								*/
++/* ------------------------------------------------------------------ */
++
++/*
++ * Send one staged message and wait for the host to acknowledge it.  A late
++ * answer to a timed out attempt can be mistaken for the answer to the next
++ * one, which is harmless: at this timeout the host has stopped servicing the
++ * channel anyway.
++ *
++ * Return: 0 once the host acknowledged the message, negative errno otherwise.
++ */
++static int lstp_vuart_push(struct lstp_vuart *u, u8 tags, u16 len)
++{
++	struct lstp_hdr *hdr = (struct lstp_hdr *)u->tx_msg;
++	struct lstp_channel *ch = u->ch;
++	unsigned int attempt;
++	int ret;
++
++	hdr->channel_id = ch->id;
++	hdr->cmd_status_code = LSTP_UART_WRITE | tags;
++	lstp_hdr_set_payload_len(hdr, len);
++
++	for (attempt = 0; attempt < LSTP_VUART_PUSH_RETRIES; attempt++) {
++		if (READ_ONCE(u->aborted) || !lstp_online(ch->dev))
++			return -ESHUTDOWN;
++
++		reinit_completion(&u->push_done);
++		WRITE_ONCE(u->push_status, LSTP_VUART_NO_STATUS);
++
++		ret = lstp_bridge_send(ch->dev, u->tx_msg, LSTP_HDR_LEN + len);
++		if (ret)
++			return ret;
++
++		if (!wait_for_completion_timeout(&u->push_done,
++						 msecs_to_jiffies(LSTP_VUART_PUSH_TIMEOUT_MS)))
++			return -ETIMEDOUT;
++
++		if (READ_ONCE(u->aborted))
++			return -ESHUTDOWN;
++
++		switch (READ_ONCE(u->push_status)) {
++		case LSTP_ST_SUCCESS:
++			return 0;
++		case LSTP_ST_BUSY:
++		case LSTP_ST_NAK:
++			/* Host buffer full: hold the bytes and try again. */
++			msleep(LSTP_VUART_PUSH_RETRY_MS);
++			break;
++		default:
++			return -EIO;
++		}
++	}
++
++	return -EBUSY;
++}
++
++/*
++ * Drain the port transmit FIFO towards the host.  Everything that decides
++ * what goes into the next message is read under the port lock and the message
++ * itself is sent with the lock dropped, because the push sleeps until the host
++ * acknowledges it.
++ */
++static void lstp_vuart_tx_work(struct work_struct *work)
++{
++	struct lstp_vuart *u = container_of(work, struct lstp_vuart, tx_work);
++	u8 *payload = u->tx_msg + LSTP_HDR_LEN;
++	struct uart_port *port = &u->port;
++	struct tty_port *tport = &port->state->port;
++	unsigned long flags;
++	unsigned int len;
++	size_t chunk;
++	u8 tags;
++	int ret;
++
++	/* Re-read every round: the negotiated speed can change on a replug. */
++	chunk = min_t(size_t, lstp_max_payload(u->ch->dev), LSTP_MAX_PAYLOAD);
++
++	for (;;) {
++		len = 0;
++		tags = 0;
++
++		uart_port_lock_irqsave(port, &flags);
++
++		if (port->x_char) {
++			/*
++			 * The flow control character jumps the queue, exactly
++			 * as it would on a real transmitter.
++			 */
++			payload[len++] = port->x_char;
++			port->x_char = 0;
++			port->icount.tx++;
++		} else if (!uart_tx_stopped(port)) {
++			len = uart_fifo_out(port, payload, chunk);
++		}
++
++		/*
++		 * A break only means anything once the bytes queued ahead of
++		 * it have gone, so it is only picked up on an empty round.
++		 */
++		if (!len && u->pending_break) {
++			u->pending_break--;
++			tags |= LSTP_UART_TAG_BREAK_DET;
++		}
++
++		if (!len && !tags) {
++			u->tx_busy = false;
++			uart_port_unlock_irqrestore(port, flags);
++			return;
++		}
++
++		/* Report the bytes an earlier round had to give up on. */
++		if (u->tx_overrun) {
++			tags |= LSTP_UART_TAG_TX_OVERRUN;
++			u->tx_overrun = false;
++		}
++
++		u->tx_busy = true;
++		if (kfifo_len(&tport->xmit_fifo) < WAKEUP_CHARS)
++			uart_write_wakeup(port);
++
++		uart_port_unlock_irqrestore(port, flags);
++
++		ret = lstp_vuart_push(u, tags, len);
++		if (!ret)
++			continue;
++
++		/*
++		 * The host is not taking the data.  Drop what is queued in one
++		 * go rather than timing out byte after byte, and let the next
++		 * message that does get through report the loss.
++		 */
++		dev_warn_ratelimited(u->ch->dev->dev,
++				     "%pOF: dropping transmit data: %d\n",
++				     u->ch->np, ret);
++
++		uart_port_lock_irqsave(port, &flags);
++		kfifo_reset_out(&tport->xmit_fifo);
++		u->pending_break = 0;
++		u->tx_overrun = true;
++		u->tx_busy = false;
++		uart_write_wakeup(port);
++		uart_port_unlock_irqrestore(port, flags);
++
++		return;
++	}
++}
++
++/* ------------------------------------------------------------------ */
++/* host -> tty								*/
++/* ------------------------------------------------------------------ */
++
++/*
++ * Hand one WRITE payload to the tty.  Called from the USB receive path, which
++ * is where a real driver would be servicing a receive interrupt.
++ *
++ * Return: 0 to acknowledge, -ENXIO to NAK so that the host holds on to the
++ * bytes and offers them again.
++ */
++static int lstp_vuart_rx(struct lstp_vuart *u, const u8 *buf, u16 len, bool brk)
++{
++	struct uart_port *port = &u->port;
++	struct tty_port *tport;
++	size_t need = len + (brk ? 1 : 0);
++
++	if (!need)
++		return 0;
++
++	/*
++	 * Nobody has the tty open.  Acknowledge and drop, the way bytes
++	 * arriving at an unread UART are lost rather than held: NAKing here
++	 * would stall the host until someone opened the port.
++	 */
++	if (!READ_ONCE(u->rx_enabled)) {
++		port->icount.buf_overrun++;
++		return 0;
++	}
++
++	tport = &port->state->port;
++
++	/* Back pressure: the local reader is behind, the host will retry. */
++	if (tty_buffer_request_room(tport, need) < need) {
++		port->icount.buf_overrun++;
++		return -ENXIO;
++	}
++
++	if (brk) {
++		port->icount.brk++;
++		tty_insert_flip_char(tport, 0, TTY_BREAK);
++	}
++	if (len) {
++		tty_insert_flip_string(tport, buf, len);
++		port->icount.rx += len;
++	}
++	tty_flip_buffer_push(tport);
++
++	return 0;
++}
++
++/* ------------------------------------------------------------------ */
++/* Message handling							*/
++/* ------------------------------------------------------------------ */
++
++static int lstp_vuart_receive(struct lstp_channel *ch, const u8 *req,
++			      size_t len)
++{
++	const struct lstp_hdr *hdr = (const struct lstp_hdr *)req;
++	struct lstp_vuart *u = ch->priv;
++	u16 payload_len = lstp_hdr_payload_len(hdr);
++	u8 code = hdr->cmd_status_code;
++	int ret;
++
++	/* The host acknowledging one of our transmit pushes. */
++	if (code & LSTP_RESPONSE_BIT) {
++		WRITE_ONCE(u->push_status, code & ~LSTP_RESPONSE_BIT);
++		complete(&u->push_done);
++		return 0;
++	}
++
++	if ((code & LSTP_UART_CMD_MASK) != LSTP_UART_WRITE)
++		return -EOPNOTSUPP;
++
++	ret = lstp_vuart_rx(u, req + LSTP_HDR_LEN, payload_len,
++			    code & LSTP_UART_TAG_GEN_BREAK);
++	if (ret)
++		return ret;
++
++	return lstp_send_response(ch, LSTP_ST_SUCCESS, NULL, 0);
++}
++
++/* ------------------------------------------------------------------ */
++/* uart_port operations							*/
++/* ------------------------------------------------------------------ */
++
++static unsigned int lstp_vuart_tx_empty(struct uart_port *port)
++{
++	struct lstp_vuart *u = to_lstp_vuart(port);
++	unsigned long flags;
++	bool empty;
++
++	uart_port_lock_irqsave(port, &flags);
++	empty = !u->tx_busy && !u->pending_break && !port->x_char &&
++		kfifo_is_empty(&port->state->port.xmit_fifo);
++	uart_port_unlock_irqrestore(port, flags);
++
++	return empty ? TIOCSER_TEMT : 0;
++}
++
++/*
++ * There are no modem lines.  Carrier tracks the USB link instead, so that a
++ * blocking open of /dev/ttyVUARTn waits for a host to show up, and CTS and DSR
++ * follow it rather than being wired permanently active.
++ */
++static unsigned int lstp_vuart_get_mctrl(struct uart_port *port)
++{
++	struct lstp_vuart *u = to_lstp_vuart(port);
++
++	if (!lstp_online(u->ch->dev))
++		return 0;
++
++	return TIOCM_CAR | TIOCM_CTS | TIOCM_DSR;
++}
++
++static void lstp_vuart_set_mctrl(struct uart_port *port, unsigned int mctrl)
++{
++}
++
++static void lstp_vuart_start_tx(struct uart_port *port)
++{
++	struct lstp_vuart *u = to_lstp_vuart(port);
++
++	u->tx_busy = true;
++	queue_work(u->wq, &u->tx_work);
++}
++
++/*
++ * Only stops handing new bytes to the host; a message already in flight is
++ * seen through, because the host has no way to un-receive it.
++ */
++static void lstp_vuart_stop_tx(struct uart_port *port)
++{
++}
++
++static void lstp_vuart_stop_rx(struct uart_port *port)
++{
++	struct lstp_vuart *u = to_lstp_vuart(port);
++
++	WRITE_ONCE(u->rx_enabled, false);
++}
++
++static void lstp_vuart_start_rx(struct uart_port *port)
++{
++	struct lstp_vuart *u = to_lstp_vuart(port);
++
++	WRITE_ONCE(u->rx_enabled, true);
++}
++
++/*
++ * Queued rather than sent from here: a break has to keep its place in the
++ * byte stream, and the send would sleep on the host acknowledgement.
++ */
++static void lstp_vuart_break_ctl(struct uart_port *port, int ctl)
++{
++	struct lstp_vuart *u = to_lstp_vuart(port);
++	unsigned long flags;
++
++	if (!ctl)
++		return;
++
++	uart_port_lock_irqsave(port, &flags);
++	u->pending_break++;
++	uart_port_unlock_irqrestore(port, flags);
++
++	queue_work(u->wq, &u->tx_work);
++}
++
++/*
++ * Shape a termios like the configuration this channel reports.  serial_core
++ * hands every fresh tty the driver wide default framing, and the
++ * ->set_termios() that follows an open would push that into the channel
++ * configuration and contradict what the host was told at probe.
++ */
++static void lstp_vuart_cfg_to_termios(struct lstp_vuart *u,
++				      struct ktermios *termios)
++{
++	struct lstp_uart_config cfg;
++	unsigned int baud;
++
++	scoped_guard(mutex, &u->cfg_lock)
++		cfg = u->cfg;
++
++	baud = le32_to_cpu(cfg.speed);
++
++	termios->c_cflag &= ~(CSIZE | CSTOPB | PARENB | PARODD | CMSPAR |
++			      CRTSCTS);
++	termios->c_cflag |= CREAD | HUPCL | CLOCAL;
++
++	switch (cfg.data_bits) {
++	case 5:
++		termios->c_cflag |= CS5;
++		break;
++	case 6:
++		termios->c_cflag |= CS6;
++		break;
++	case 7:
++		termios->c_cflag |= CS7;
++		break;
++	default:
++		termios->c_cflag |= CS8;
++		break;
++	}
++
++	if (cfg.stop_bits == 2)
++		termios->c_cflag |= CSTOPB;
++
++	switch (LSTP_UART_PARITY_OF(cfg.parity_flow)) {
++	case LSTP_UART_PARITY_ODD:
++		termios->c_cflag |= PARENB | PARODD;
++		break;
++	case LSTP_UART_PARITY_EVEN:
++		termios->c_cflag |= PARENB;
++		break;
++	case LSTP_UART_PARITY_MARK:
++		termios->c_cflag |= PARENB | PARODD | CMSPAR;
++		break;
++	case LSTP_UART_PARITY_SPACE:
++		termios->c_cflag |= PARENB | CMSPAR;
++		break;
++	}
++
++	termios->c_iflag &= ~(IXON | IXOFF | IXANY);
++	switch (LSTP_UART_FLOW_OF(cfg.parity_flow)) {
++	case LSTP_UART_FLOW_RTSCTS:
++		termios->c_cflag |= CRTSCTS;
++		break;
++	case LSTP_UART_FLOW_XONXOFF:
++		termios->c_iflag |= IXON | IXOFF;
++		break;
++	}
++
++	tty_termios_encode_baud_rate(termios, baud, baud);
++}
++
++static int lstp_vuart_startup(struct uart_port *port)
++{
++	struct lstp_vuart *u = to_lstp_vuart(port);
++	struct tty_struct *tty = port->state->port.tty;
++
++	WRITE_ONCE(u->aborted, false);
++	WRITE_ONCE(u->rx_enabled, true);
++
++	/*
++	 * Only the first open: from then on the local end owns the framing and
++	 * a reopen keeps whatever the last stty left behind, the way it does
++	 * on any other serial port.  serial_core applies the result through
++	 * ->set_termios() as soon as this returns.
++	 */
++	if (tty && !u->termios_seeded) {
++		u->termios_seeded = true;
++		lstp_vuart_cfg_to_termios(u, &tty->termios);
++	}
++
++	return 0;
++}
++
++static void lstp_vuart_shutdown(struct uart_port *port)
++{
++	struct lstp_vuart *u = to_lstp_vuart(port);
++	unsigned long flags;
++
++	WRITE_ONCE(u->rx_enabled, false);
++
++	/* Unblock a push waiting on a host that is not answering. */
++	WRITE_ONCE(u->aborted, true);
++	complete(&u->push_done);
++	cancel_work_sync(&u->tx_work);
++	WRITE_ONCE(u->aborted, false);
++	reinit_completion(&u->push_done);
++	WRITE_ONCE(u->push_status, LSTP_VUART_NO_STATUS);
++
++	uart_port_lock_irqsave(port, &flags);
++	u->pending_break = 0;
++	u->tx_overrun = false;
++	u->tx_busy = false;
++	uart_port_unlock_irqrestore(port, flags);
++}
++
++/* Called with the port lock held, right after serial_core emptied the FIFO. */
++static void lstp_vuart_flush_buffer(struct uart_port *port)
++{
++	struct lstp_vuart *u = to_lstp_vuart(port);
++
++	u->pending_break = 0;
++}
++
++/*
++ * Nothing is framed on the way to the host, so every framing userspace can
++ * ask for is accepted as is and recorded as the configuration this channel
++ * reports.
++ */
++static void lstp_vuart_set_termios(struct uart_port *port,
++				   struct ktermios *termios,
++				   const struct ktermios *old)
++{
++	struct lstp_vuart *u = to_lstp_vuart(port);
++	struct lstp_uart_config cfg;
++	unsigned int baud;
++	u8 parity = LSTP_UART_PARITY_NONE;
++	u8 flow = LSTP_UART_FLOW_NONE;
++
++	baud = uart_get_baud_rate(port, termios, old, LSTP_VUART_MIN_BAUD,
++				  LSTP_VUART_MAX_BAUD);
++
++	if (termios->c_cflag & PARENB) {
++		if (termios->c_cflag & CMSPAR)
++			parity = (termios->c_cflag & PARODD) ?
++				 LSTP_UART_PARITY_MARK : LSTP_UART_PARITY_SPACE;
++		else
++			parity = (termios->c_cflag & PARODD) ?
++				 LSTP_UART_PARITY_ODD : LSTP_UART_PARITY_EVEN;
++	}
++
++	if (termios->c_cflag & CRTSCTS)
++		flow = LSTP_UART_FLOW_RTSCTS;
++	else if (termios->c_iflag & (IXON | IXOFF))
++		flow = LSTP_UART_FLOW_XONXOFF;
++
++	scoped_guard(mutex, &u->cfg_lock) {
++		cfg = u->cfg;
++		cfg.speed = cpu_to_le32(baud);
++		cfg.data_bits = tty_get_char_size(termios->c_cflag);
++		cfg.stop_bits = (termios->c_cflag & CSTOPB) ? 2 : 1;
++		cfg.parity_flow = LSTP_UART_PARITY_FLOW(parity, flow);
++		u->cfg = cfg;
++	}
++
++	uart_port_lock_irq(port);
++	uart_update_timeout(port, termios->c_cflag, baud);
++	uart_port_unlock_irq(port);
++}
++
++static const char *lstp_vuart_type(struct uart_port *port)
++{
++	return port->type == PORT_LSTP_VUART ? "LSTP virtual UART" : NULL;
++}
++
++static void lstp_vuart_config_port(struct uart_port *port, int flags)
++{
++	if (flags & UART_CONFIG_TYPE)
++		port->type = PORT_LSTP_VUART;
++}
++
++static int lstp_vuart_verify_port(struct uart_port *port,
++				  struct serial_struct *ser)
++{
++	if (ser->type != PORT_UNKNOWN && ser->type != PORT_LSTP_VUART)
++		return -EINVAL;
++	if (ser->irq || ser->baud_base != port->uartclk / 16)
++		return -EINVAL;
++
++	return 0;
++}
++
++/* There is nothing to reserve; the "registers" are the LSTP channel. */
++static int lstp_vuart_request_port(struct uart_port *port)
++{
++	return 0;
++}
++
++static void lstp_vuart_release_port(struct uart_port *port)
++{
++}
++
++static const struct uart_ops lstp_vuart_ops_tty = {
++	.tx_empty	= lstp_vuart_tx_empty,
++	.set_mctrl	= lstp_vuart_set_mctrl,
++	.get_mctrl	= lstp_vuart_get_mctrl,
++	.stop_tx	= lstp_vuart_stop_tx,
++	.start_tx	= lstp_vuart_start_tx,
++	.stop_rx	= lstp_vuart_stop_rx,
++	.start_rx	= lstp_vuart_start_rx,
++	.break_ctl	= lstp_vuart_break_ctl,
++	.startup	= lstp_vuart_startup,
++	.shutdown	= lstp_vuart_shutdown,
++	.flush_buffer	= lstp_vuart_flush_buffer,
++	.set_termios	= lstp_vuart_set_termios,
++	.type		= lstp_vuart_type,
++	.config_port	= lstp_vuart_config_port,
++	.verify_port	= lstp_vuart_verify_port,
++	.request_port	= lstp_vuart_request_port,
++	.release_port	= lstp_vuart_release_port,
++};
++
++/* ------------------------------------------------------------------ */
++/* Lifecycle								*/
++/* ------------------------------------------------------------------ */
++
++/*
++ * The host went away.  What is queued describes traffic for a link that no
++ * longer exists, so it is dropped rather than replayed to whoever connects
++ * next, and the local end is told the carrier went with it.
++ */
++static void lstp_vuart_reset(struct lstp_channel *ch)
++{
++	struct lstp_vuart *u = ch->priv;
++	struct uart_port *port;
++	unsigned long flags;
++
++	if (!u)
++		return;
++
++	port = &u->port;
++
++	WRITE_ONCE(u->aborted, true);
++	/* Wake the single push waiter; no acknowledgement is coming. */
++	complete(&u->push_done);
++	cancel_work_sync(&u->tx_work);
++
++	uart_port_lock_irqsave(port, &flags);
++	if (READ_ONCE(u->rx_enabled)) {
++		kfifo_reset_out(&port->state->port.xmit_fifo);
++		uart_write_wakeup(port);
++		/* Honours CLOCAL: a no-op for a local user who ignores DCD. */
++		uart_handle_dcd_change(port, false);
++	}
++	u->pending_break = 0;
++	u->tx_overrun = false;
++	u->tx_busy = false;
++	port->x_char = 0;
++	uart_port_unlock_irqrestore(port, flags);
++
++	/* No waiter is left, so the completion can be re-armed. */
++	reinit_completion(&u->push_done);
++	WRITE_ONCE(u->push_status, LSTP_VUART_NO_STATUS);
++	WRITE_ONCE(u->aborted, false);
++}
++
++static int lstp_vuart_probe(struct lstp_channel *ch)
++{
++	struct device *dev = ch->dev->dev;
++	struct lstp_uart_config cfg;
++	struct lstp_vuart *u;
++	int line;
++	int ret;
++
++	u = kzalloc(sizeof(*u), GFP_KERNEL);
++	if (!u)
++		return -ENOMEM;
++
++	u->ch = ch;
++	mutex_init(&u->cfg_lock);
++	init_completion(&u->push_done);
++	u->push_status = LSTP_VUART_NO_STATUS;
++	INIT_WORK(&u->tx_work, lstp_vuart_tx_work);
++
++	ret = lstp_vuart_parse_dt_config(ch, &cfg);
++	if (ret)
++		goto err_free;
++	u->cfg = cfg;
++
++	line = ida_alloc_max(&lstp_vuart_lines, LSTP_VUART_PORTS - 1,
++			     GFP_KERNEL);
++	if (line < 0) {
++		dev_err(dev, "%pOF: no free %s line (%u supported)\n", ch->np,
++			lstp_vuart_driver.dev_name, LSTP_VUART_PORTS);
++		ret = line;
++		goto err_free;
++	}
++
++	/*
++	 * The push sleeps waiting for the host to acknowledge each message, so
++	 * it must not share a worker with anything else on the system.
++	 */
++	u->wq = alloc_workqueue("lstp-vuart%u", WQ_UNBOUND, 0, ch->id);
++	if (!u->wq) {
++		ret = -ENOMEM;
++		goto err_line;
++	}
++
++	u->port.dev = dev;
++	u->port.line = line;
++	u->port.type = PORT_LSTP_VUART;
++	u->port.iotype = UPIO_MEM;
++	u->port.ops = &lstp_vuart_ops_tty;
++	u->port.uartclk = LSTP_VUART_UARTCLK;
++	u->port.fifosize = LSTP_MAX_PAYLOAD;
++	u->port.flags = UPF_BOOT_AUTOCONF;
++
++	ret = uart_add_one_port(&lstp_vuart_driver, &u->port);
++	if (ret) {
++		dev_err(dev, "%pOF: cannot add %s%d: %d\n", ch->np,
++			lstp_vuart_driver.dev_name, line, ret);
++		goto err_wq;
++	}
++	u->port_added = true;
++
++	ch->priv = u;
++
++	dev_info(dev, "%pOF: /dev/%s%d, %u baud, %u%c%u, flow control %u\n",
++		 ch->np, lstp_vuart_driver.dev_name, line,
++		 le32_to_cpu(cfg.speed), cfg.data_bits,
++		 "NOEMS"[LSTP_UART_PARITY_OF(cfg.parity_flow)], cfg.stop_bits,
++		 LSTP_UART_FLOW_OF(cfg.parity_flow));
++
++	return 0;
++
++err_wq:
++	destroy_workqueue(u->wq);
++err_line:
++	ida_free(&lstp_vuart_lines, line);
++err_free:
++	mutex_destroy(&u->cfg_lock);
++	kfree(u);
++	return ret;
++}
++
++static void lstp_vuart_remove(struct lstp_channel *ch)
++{
++	struct lstp_vuart *u = ch->priv;
++
++	if (!u)
++		return;
++
++	/*
++	 * Hangs the tty up and runs ->shutdown(), so no port operation can
++	 * start after this returns.
++	 */
++	if (u->port_added)
++		uart_remove_one_port(&lstp_vuart_driver, &u->port);
++
++	WRITE_ONCE(u->aborted, true);
++	complete(&u->push_done);
++	cancel_work_sync(&u->tx_work);
++
++	destroy_workqueue(u->wq);
++	ida_free(&lstp_vuart_lines, u->port.line);
++	mutex_destroy(&u->cfg_lock);
++	kfree(u);
++	ch->priv = NULL;
++}
++
++const struct lstp_channel_ops lstp_vuart_ops = {
++	.probe		= lstp_vuart_probe,
++	.remove		= lstp_vuart_remove,
++	.reset		= lstp_vuart_reset,
++	.receive	= lstp_vuart_receive,
++	.read_config	= lstp_vuart_read_config,
++	.write_config	= lstp_vuart_write_config,
++};
++
++/* ------------------------------------------------------------------ */
++/* tty driver registration						*/
++/* ------------------------------------------------------------------ */
++
++int lstp_vuart_driver_register(void)
++{
++	return uart_register_driver(&lstp_vuart_driver);
++}
++
++void lstp_vuart_driver_unregister(void)
++{
++	uart_unregister_driver(&lstp_vuart_driver);
++	ida_destroy(&lstp_vuart_lines);
++}
+diff --git a/drivers/usb/misc/lstp_bridge/lstp.h b/drivers/usb/misc/lstp_bridge/lstp.h
+new file mode 100644
+index 000000000000..1943234f660b
+--- /dev/null
++++ b/drivers/usb/misc/lstp_bridge/lstp.h
+@@ -0,0 +1,466 @@
++/* SPDX-License-Identifier: GPL-2.0 */
++/*
++ * LSTP (Low Speed Transport Protocol) USB gadget function.
++ *
++ * LSTP is the NVIDIA vendor-specific tunnel used by the OpenSMA server
++ * management adapter firmware to expose low speed buses (I2C, GPIO, SPI,
++ * UART) of a management microcontroller to a USB host.  This driver
++ * implements the *device* side of that protocol: it turns the local
++ * machine into an LSTP provider backed by Linux i2c adapters, gpio
++ * descriptors and spi devices.
++ *
++ * Wire format (little endian):
++ *
++ *	+------------+-----------------+---------+---------+----------+
++ *	| channel_id | cmd_status_code | len_lsb | len_msb | payload  |
++ *	+------------+-----------------+---------+---------+----------+
++ *
++ * Bit 7 of cmd_status_code is the response flag: 0 for a request, 1 for a
++ * response.  In a response the remaining bits carry an enum lstp_status,
++ * in a request they carry a channel-type specific command.  One LSTP
++ * message is carried per bulk transfer and a message is at most 512 bytes.
++ *
++ * Copyright (c) 2026 Axiado Corporation
++ */
++
++#ifndef __USB_MISC_LSTP_H
++#define __USB_MISC_LSTP_H
++
++#include <linux/kernel.h>
++#include <linux/rwsem.h>
++#include <linux/types.h>
++
++/* ------------------------------------------------------------------ */
++/* Wire protocol							*/
++/* ------------------------------------------------------------------ */
++
++#define LSTP_VERSION			1
++#define LSTP_MSG_SIZE			512
++#define LSTP_HDR_LEN			4
++#define LSTP_MAX_PAYLOAD		(LSTP_MSG_SIZE - LSTP_HDR_LEN)
++#define LSTP_MAX_CHANNELS		255
++#define LSTP_CHANNEL_NAME_LEN		16
++#define LSTP_GPIO_NAME_LEN		32
++
++#define LSTP_RESPONSE_BIT		0x80
++
++enum lstp_channel_type {
++	LSTP_CH_MANAGEMENT	= 0,
++	LSTP_CH_SPI		= 1,
++	LSTP_CH_GPIO		= 2,
++	LSTP_CH_I2C		= 3,
++	LSTP_CH_UART		= 4,
++	LSTP_CH_IPMI		= 5,
++	/* 0x06 - 0x7e reserved, 0x7f - 0xff OEM defined */
++};
++
++enum lstp_status {
++	LSTP_ST_SUCCESS		= 0x00,
++	LSTP_ST_ERROR		= 0x01,
++	LSTP_ST_TIMEOUT		= 0x02,
++	LSTP_ST_BUSY		= 0x03,
++	LSTP_ST_NAK		= 0x04,
++	LSTP_ST_ARB_LOST	= 0x05,
++	LSTP_ST_NOT_SUPPORTED	= 0x06,
++	LSTP_ST_TOO_LARGE	= 0x07,
++	/* Never put on the wire, drop the message instead. */
++	LSTP_ST_SILENT_DROP	= 0xfe,
++};
++
++struct lstp_hdr {
++	u8 channel_id;
++	u8 cmd_status_code;
++	u8 len_lsb;
++	u8 len_msb;
++} __packed;
++
++static inline u16 lstp_hdr_payload_len(const struct lstp_hdr *hdr)
++{
++	return hdr->len_lsb | ((u16)hdr->len_msb << 8);
++}
++
++static inline void lstp_hdr_set_payload_len(struct lstp_hdr *hdr, u16 len)
++{
++	hdr->len_lsb = len & 0xff;
++	hdr->len_msb = len >> 8;
++}
++
++/* Management channel (channel 0) */
++enum lstp_mgmt_command {
++	LSTP_MGMT_READ_CONFIG	= 0x08,
++	LSTP_MGMT_WRITE_CONFIG	= 0x09,
++	LSTP_MGMT_LOCK		= 0x0a,
++	LSTP_MGMT_READ_LOCK	= 0x0b,
++};
++
++struct lstp_config_read_req {
++	u8 channel_id;
++	__le16 offset;
++	__le16 length;
++} __packed;
++
++struct lstp_config_write_req {
++	u8 channel_id;
++	__le16 offset;
++} __packed;
++
++struct lstp_config_blob {
++	u8 channel_type;
++	u8 channel_enabled;
++	u8 channel_name[LSTP_CHANNEL_NAME_LEN];
++	/* followed by channel type specific configuration */
++} __packed;
++
++struct lstp_mgmt_config {
++	u8 lstp_version;
++	u8 num_channels;
++} __packed;
++
++enum lstp_lock_state {
++	LSTP_UNLOCKED	= 0x00,
++	LSTP_LOCKED	= 0x01,
++};
++
++/* SPI channel */
++#define LSTP_SPI_MAX_CS			2
++#define LSTP_SPI_CMD_MASK		0x0f
++#define LSTP_SPI_CS_DEASSERT		0x10
++#define LSTP_SPI_CS_ASSERT		0x20
++#define LSTP_SPI_CS_MASK		0xc0
++#define LSTP_SPI_CS_SHIFT		6
++/* Length the legacy flashrom host driver expects from a Config response. */
++#define LSTP_SPI_CONFIG_RESP_LEN	12
++
++enum lstp_spi_command {
++	LSTP_SPI_CONFIG		= 0x00,
++	LSTP_SPI_READ		= 0x01,
++	LSTP_SPI_WRITE		= 0x02,
++	LSTP_SPI_WRITE_READ	= 0x03,
++	LSTP_SPI_POSTED_WRITE	= 0x04,
++	LSTP_SPI_CMD_END	= 0x07,
++};
++
++struct lstp_spi_config {
++	u8 channel_num_cs;
++	__le32 freq_hz;
++} __packed;
++
++/* GPIO channel */
++#define LSTP_GPIO_CMD_MASK		0x7f
++#define LSTP_GPIO_MAX_PER_PACKET	10
++
++enum lstp_gpio_command {
++	LSTP_GPIO_GET_VALUE		= 0x00,
++	LSTP_GPIO_SET_VALUE		= 0x01,
++	LSTP_GPIO_GET_IRQ_CONFIG	= 0x02,
++	LSTP_GPIO_SET_IRQ_CONFIG	= 0x03,
++	LSTP_GPIO_IRQ_EVENT		= 0x04,
++};
++
++enum lstp_gpio_direction {
++	LSTP_GPIO_OUTPUT	= 0,
++	LSTP_GPIO_INPUT		= 1,
++};
++
++enum lstp_gpio_state {
++	LSTP_GPIO_LOW	= 0,
++	LSTP_GPIO_HIGH	= 1,
++};
++
++enum lstp_gpio_drive {
++	LSTP_GPIO_PUSH_PULL	= 0,
++	LSTP_GPIO_OPEN_DRAIN	= 1,
++	LSTP_GPIO_OPEN_SOURCE	= 2,
++};
++
++enum lstp_gpio_bias {
++	LSTP_GPIO_NO_PULL	= 0,
++	LSTP_GPIO_PULL_UP	= 1,
++	LSTP_GPIO_PULL_DOWN	= 2,
++};
++
++enum lstp_gpio_irq_config {
++	LSTP_GPIO_IRQ_DISABLED	= 0,
++	LSTP_GPIO_IRQ_RISING	= 1,
++	LSTP_GPIO_IRQ_FALLING	= 2,
++	LSTP_GPIO_IRQ_BOTH_EDGE	= 3,
++	LSTP_GPIO_IRQ_HIGH	= 4,
++	LSTP_GPIO_IRQ_LOW	= 5,
++	LSTP_GPIO_IRQ_MAX	= LSTP_GPIO_IRQ_LOW,
++};
++
++struct lstp_gpio_channel_config {
++	u8 num_gpio;
++	/* followed by num_gpio * struct lstp_gpio_config */
++} __packed;
++
++struct lstp_gpio_config {
++	u8 gpio_name[LSTP_GPIO_NAME_LEN];
++	u8 direction;			/* enum lstp_gpio_direction */
++	u8 default_output;		/* enum lstp_gpio_state */
++	u8 output_drive_config;		/* enum lstp_gpio_drive */
++	u8 output_persist_state;	/* boolean */
++	u8 bias_pull_config;		/* enum lstp_gpio_bias */
++	__le16 bias_pull_strength;	/* 16 ohm increments */
++	__le16 output_drive_strength;	/* mA */
++	__le16 slew_rate;		/* 100ps increments */
++	__le16 input_debounce_time;	/* us */
++	u8 rsvd[3];
++} __packed;
++
++static_assert(sizeof(struct lstp_gpio_config) == 48,
++	      "struct lstp_gpio_config must stay 48 bytes wide");
++
++struct lstp_gpio_get_value_req {
++	__le16 gpio_index;
++} __packed;
++
++struct lstp_gpio_get_value_resp {
++	u8 value;
++} __packed;
++
++struct lstp_gpio_set_value_req {
++	__le16 gpio_index;
++	u8 value;
++} __packed;
++
++struct lstp_gpio_get_irq_config_req {
++	__le16 gpio_index;
++} __packed;
++
++struct lstp_gpio_irq_config_req {
++	__le16 gpio_index;
++	u8 irq_type;
++} __packed;
++
++struct lstp_gpio_irq_config_resp {
++	u8 irq_type;
++} __packed;
++
++struct lstp_gpio_irq_event {
++	__le16 gpio_index;
++	u8 value;
++} __packed;
++
++/* I2C channel */
++#define LSTP_I2C_CMD_MASK		0xbf
++#define LSTP_I2C_NO_STOP		0x40
++
++enum lstp_i2c_command {
++	LSTP_I2C_BUS_RECOVERY		= 0x00,
++	LSTP_I2C_READ			= 0x01,
++	LSTP_I2C_WRITE			= 0x02,
++	LSTP_I2C_READ_RECV_LEN		= 0x03,	/* deprecated */
++	LSTP_I2C_WRITE_READ		= 0x04,
++	LSTP_I2C_SMBUS_BLOCK_READ	= 0x05,
++};
++
++enum lstp_i2c_speed {
++	LSTP_I2C_STANDARD	= 0x00,	/* 100kHz */
++	LSTP_I2C_FAST		= 0x01,	/* 400kHz */
++	LSTP_I2C_FAST_PLUS	= 0x02,	/* 1MHz */
++	LSTP_I2C_HIGH		= 0x03,	/* 3.4MHz */
++};
++
++struct lstp_i2c_config {
++	u8 speed;
++} __packed;
++
++struct lstp_i2c_read_req {
++	u8 address;
++	__le16 read_len;
++} __packed;
++
++struct lstp_i2c_write_req {
++	u8 address;
++	/* followed by the write data */
++} __packed;
++
++struct lstp_i2c_write_read_req {
++	u8 address;
++	__le16 read_len;
++	/* followed by the write data */
++} __packed;
++
++struct lstp_i2c_smbus_block_read_req {
++	u8 address;
++	__le16 include_smbus_pec;
++	/* followed by the command byte(s) to write */
++} __packed;
++
++/* UART channel */
++
++/*
++ * Command byte layout: bits [1:0] carry the command, bit [7] the response
++ * flag and bits [6:2] a set of event tags.  The tags in the host to device
++ * direction ask for an action, the ones in the device to host direction
++ * report an event that happened alongside the data of the same message.
++ * Support for the tags is optional; unsupported ones are ignored silently.
++ */
++#define LSTP_UART_CMD_MASK		0x03
++#define LSTP_UART_TAG_GEN_BREAK		0x08	/* host -> device */
++#define LSTP_UART_TAG_BREAK_DET		0x10	/* device -> host */
++#define LSTP_UART_TAG_TX_OVERRUN	0x20	/* device -> host */
++#define LSTP_UART_TAG_CARRIER_DOWN	0x40	/* device -> host */
++
++enum lstp_uart_command {
++	LSTP_UART_WRITE		= 0x00,
++};
++
++enum lstp_uart_parity {
++	LSTP_UART_PARITY_NONE	= 0,
++	LSTP_UART_PARITY_ODD	= 1,
++	LSTP_UART_PARITY_EVEN	= 2,
++	LSTP_UART_PARITY_MARK	= 3,
++	LSTP_UART_PARITY_SPACE	= 4,
++	LSTP_UART_PARITY_MAX	= LSTP_UART_PARITY_SPACE,
++};
++
++enum lstp_uart_flow {
++	LSTP_UART_FLOW_NONE	= 0,
++	LSTP_UART_FLOW_XONXOFF	= 1,
++	LSTP_UART_FLOW_RTSCTS	= 2,
++	LSTP_UART_FLOW_DTRDSR	= 3,
++	LSTP_UART_FLOW_MAX	= LSTP_UART_FLOW_DTRDSR,
++};
++
++/* Parity lives in the low nibble of parity_flow, flow control in the high one. */
++#define LSTP_UART_PARITY_OF(pf)		((pf) & 0x0f)
++#define LSTP_UART_FLOW_OF(pf)		(((pf) >> 4) & 0x0f)
++#define LSTP_UART_PARITY_FLOW(p, f)	(((p) & 0x0f) | (((f) & 0x0f) << 4))
++
++struct lstp_uart_config {
++	__le32 speed;			/* baud rate in Hz */
++	u8 data_bits;
++	u8 stop_bits;
++	u8 parity_flow;
++	__le16 output_drive_strength;	/* mA, 0 = not specified */
++	__le16 slew_rate;		/* 100ps increments, 0 = not specified */
++	__le16 input_debounce_time;	/* us, 0 = not specified */
++	__le16 glitch_filter_width;	/* ns, 0 = not specified */
++} __packed;
++
++static_assert(sizeof(struct lstp_uart_config) == 15,
++	      "struct lstp_uart_config must stay 15 bytes wide");
++
++/* ------------------------------------------------------------------ */
++/* Driver internals							*/
++/* ------------------------------------------------------------------ */
++
++struct lstp_dev;
++struct lstp_channel;
++
++/**
++ * struct lstp_channel_ops - per channel-type backend
++ * @probe:	parse the device tree node and grab resources
++ * @remove:	release everything @probe took
++ * @reset:	called when the USB function goes offline
++ * @receive:	handle one validated request; the handler is responsible for
++ *		emitting its own response(s) when it returns 0.  A negative
++ *		errno makes the core emit a generic error response.
++ * @read_config: append the channel-type specific part of a management
++ *		ReadConfig response; returns the number of bytes written or
++ *		a negative errno.
++ * @write_config: apply a management WriteConfig request; returns 0 or a
++ *		negative errno.
++ */
++struct lstp_channel_ops {
++	int (*probe)(struct lstp_channel *ch);
++	void (*remove)(struct lstp_channel *ch);
++	void (*reset)(struct lstp_channel *ch);
++	int (*receive)(struct lstp_channel *ch, const u8 *req, size_t len);
++	int (*read_config)(struct lstp_channel *ch, u16 offset, u16 length,
++			   u8 *out, size_t out_max);
++	int (*write_config)(struct lstp_channel *ch, const u8 *req, size_t len);
++};
++
++struct lstp_channel {
++	struct lstp_dev *dev;
++	struct device_node *np;
++	u8 id;
++	u8 type;
++	u8 name[LSTP_CHANNEL_NAME_LEN];
++	bool enabled;
++	const struct lstp_channel_ops *ops;
++	void *priv;
++};
++
++/**
++ * struct lstp_transport - hooks provided by the USB function
++ * @send:	queue one LSTP message on the bulk IN endpoint
++ * @online:	true while the function is enabled by the host
++ * @max_payload: largest payload the host can receive in one message, derived
++ *		from the negotiated endpoint size.  Only matters to channels
++ *		that send unsolicited messages: a reply is bounded by the
++ *		request it answers, a push is not.
++ */
++struct lstp_transport {
++	int (*send)(void *ctx, const void *buf, size_t len);
++	bool (*online)(void *ctx);
++	size_t (*max_payload)(void *ctx);
++};
++
++struct lstp_dev {
++	struct device *dev;
++	struct kref kref;
++	/* Serialises message handling against channel teardown. */
++	struct rw_semaphore sem;
++	bool dead;
++
++	unsigned int nr_channels;
++	struct lstp_channel *channels;
++
++	spinlock_t xport_lock;	/* guards xport and xport_ctx */
++	const struct lstp_transport *xport;
++	void *xport_ctx;
++};
++
++/* lstp-core.c */
++struct lstp_dev *lstp_dev_get(void);
++void lstp_dev_put(struct lstp_dev *dev);
++int lstp_dev_attach_transport(struct lstp_dev *dev,
++			      const struct lstp_transport *xport, void *ctx);
++void lstp_dev_detach_transport(struct lstp_dev *dev, void *ctx);
++void lstp_dev_reset_channels(struct lstp_dev *dev);
++
++void lstp_handle_message(struct lstp_dev *dev, const u8 *buf, size_t len);
++
++bool lstp_online(struct lstp_dev *dev);
++size_t lstp_max_payload(struct lstp_dev *dev);
++int lstp_bridge_send(struct lstp_dev *dev, const void *buf, size_t len);
++int lstp_send_msg(struct lstp_dev *dev, u8 channel_id, u8 cmd_status,
++		  const void *payload, u16 payload_len);
++int lstp_send_response(struct lstp_channel *ch, u8 status,
++		       const void *payload, u16 payload_len);
++u8 lstp_status_from_errno(int err);
++
++/* Channel type backends */
++extern const struct lstp_channel_ops lstp_mgmt_ops;
++extern const struct lstp_channel_ops lstp_i2c_ops;
++extern const struct lstp_channel_ops lstp_gpio_ops;
++extern const struct lstp_channel_ops lstp_spi_ops;
++extern const struct lstp_channel_ops lstp_vuart_ops;
++
++/*
++ * True when at least one pin of a GPIO channel may have its direction
++ * changed by the host.  Drives the management ReadLock answer.
++ */
++bool lstp_gpio_channel_unlocked(struct lstp_channel *ch);
++
++/* lstp-spi.c registers a small spi_driver so channels can bind to an
++ * spi_device referenced by phandle.
++ */
++int lstp_spi_driver_register(void);
++void lstp_spi_driver_unregister(void);
++
++/* lstp-vuart.c owns a uart_driver of its own: a virtual UART channel has no
++ * controller to bind to, it *is* the controller behind /dev/ttyVUARTn.
++ */
++int lstp_vuart_driver_register(void);
++void lstp_vuart_driver_unregister(void);
++
++/* f_lstp.c */
++int lstp_function_register(void);
++void lstp_function_unregister(void);
++
++#endif /* __USB_MISC_LSTP_H */
+diff --git a/include/uapi/linux/serial_core.h b/include/uapi/linux/serial_core.h
+index 9c007a106330..cf3b87fe5d83 100644
+--- a/include/uapi/linux/serial_core.h
++++ b/include/uapi/linux/serial_core.h
+@@ -231,6 +231,9 @@
+ /* Sunplus UART */
+ #define PORT_SUNPLUS	123
+ 
++/* LSTP virtual UART, no controller behind it */
++#define PORT_LSTP_VUART	124
++
+ /* Generic type identifier for ports which type is not important to userspace. */
+ #define PORT_GENERIC	(-1)
+ 
+-- 
+2.34.1
+

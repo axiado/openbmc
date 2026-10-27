@@ -9,6 +9,18 @@
 
 / {
 	model = "Axiado AX3005 FVP";
+
+	lstp: lstp {
+		compatible = "nvidia,lstp";
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		channel@0 {
+			reg = <0>;
+			nvidia,channel-type = "management";
+			nvidia,channel-name = "AXIADO_AX3005_LSTP_BR";
+		};
+	};
 };
 
 &usb2_0 {
