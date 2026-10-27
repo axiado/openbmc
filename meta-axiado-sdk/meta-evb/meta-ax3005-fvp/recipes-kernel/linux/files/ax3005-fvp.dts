@@ -1,0 +1,16 @@
+// SPDX-License-Identifier: GPL-2.0+
+/*
+ * DTS file for FVP model of Axiado AX3005 SoC Evaluation board
+ */
+
+/dts-v1/;
+
+#include "ax3005_evk.dts"
+
+/ {
+	model = "Axiado AX3005 FVP";
+};
+
+&usb2_0 {
+	compatible = "axiado,ax3000-udc";
+};
